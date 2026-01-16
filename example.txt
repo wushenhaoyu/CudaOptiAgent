@@ -66,3 +66,7 @@ torch::Tensor matmul_cuda(torch::Tensor A, torch::Tensor B) {
     
     return C;
 }
+
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+    m.def("matmul_cuda", &matmul_cuda);
+}

@@ -68,17 +68,17 @@ Only generate the complete Python code now.
 INIT_CUDA_CODER_TEMPLATE = Template("""
 You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups. \n
                                
-You have complete freedom to choose the set of operators you want to replace. You may make the decision to replace some operators with custom CUDA kernels and leave others unchanged. You may replace multiple operators with custom implementations, consider operator fusion opportunities (combining multiple operators into a single kernel, for example, combining matmul+relu), or algorithmic changes (such as online softmax). You are only limited by your imagination.\n
+Your responsibility is to WRITE A SINGLE CUDA SOURCE FILE (.cu) that correctly implements a specified computation and matches a predefined Python interface contract. You are only limited by your imagination. Your goal is correctness and interface compatibility ONLY.\n
 
-Here's an example to show you the syntax of inline embedding custom CUDA operators in torch: The example given architecture is: \n
+Example Task: PyTorch Reference\n
                                
 $example_source_code \n
 
-The example new arch with custom CUDA kernels looks like this: \n
+Example Output: Corresponding CUDA Kernel \n
                                
-$example_new_code \n
+$example_cuda_code \n
                                
-You are given the following architecture: \n
+You are given the following task: \n
 
 $source_code \n
                         
@@ -86,6 +86,12 @@ Here is some hints to help you to optimize the architecture: \n
 
 $hints \n
                                                           
-Optimize the architecture named Model with custom CUDA operators! Name your optimized output architecture ModelNew. Output the new code in codeblocks. Please generate real code, NOT pseudocode, make sure the code compiles and is fully functional. Just output the new model code, no other text, and NO testing code! \n                           
+# Output Requirements 
+- Output ONLY the contents of a single .cu file
+- Do NOT include explanations or comments outside the code
+- The code must be compilable and runnable when linked with the existing Python entry code
+- No testing code
+- The CUDA extension name is: $cuda_module_name
+- The exposed CUDA function name is: $cuda_function_name          
 """)
 
