@@ -37,8 +37,14 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
             if i == 0:
                 input , output = analyzer.init_analyzer(current_dir, args)
                 write_file(current_dir / "analyzer_io.txt", f"Input Prompt:\n{input}\n\nOutput Response:\n{output}")
+
                 hints = extract_recommendation(output)
-                output , input = coder.gernerate_cuda_code(current_dir, read_file(task), task_name, task_name)
+                input , output = coder.gernerate_cuda_code(current_dir, read_file(task), task_name, task_name)
+                write_file(current_dir / "kernel.cu", output)
+                shutil.copy2(current_dir / "kernel.cu", task_root / "spec" / "kernel.cu")
+
+                
+
                 
             else:
                 input , output = analyzer.init_analyzer(current_dir, args)

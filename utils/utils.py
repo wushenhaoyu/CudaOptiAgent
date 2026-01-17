@@ -42,3 +42,15 @@ def write_file(file_path: str, content: str, encoding: str = "utf-8") -> bool:
 def extract_recommendation(text: str) -> str:
     m = re.search(r'\[recommendation\]\s*(.*?)\s*(?:\[\w+]|$)', text, flags=re.S)
     return m.group(1).strip() if m else "none"
+
+def _last_n_lines(text: str, n: int = 150) -> str:
+    lines = text.splitlines()
+    return "\n".join(lines[-n:]) if len(lines) > n else text
+
+_INVOCATION_SPLITTER = "Invoked with:"
+def _sanitize_error_message(exc: Exception) -> str:
+    """Strip pybind's large‑tensor printouts and keep only the key error text."""
+    msg = str(exc)
+    if _INVOCATION_SPLITTER in msg:
+        msg = msg.split(_INVOCATION_SPLITTER, 1)[0].rstrip()
+    return msg
