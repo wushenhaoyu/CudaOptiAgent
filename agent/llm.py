@@ -11,7 +11,7 @@ class LLM:
     def __init__(self,
                  server_name: str = "deepseek",
                  model: str = "deepseek-chat",
-                 max_tokens: int = 1024,
+                 max_tokens: int = 4096,
                  temperature: float = 0.7,
                  top_p: float = 1.0):
         if server_name == "deepseek":

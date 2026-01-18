@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import tempfile
+import numpy as np
 import torch
 import torch.nn as nn
 import importlib.util 
@@ -17,6 +18,7 @@ from typing import Any, Dict, List, Tuple
 from multiprocessing import get_context
 
 from utils.utils import _last_n_lines, _sanitize_error_message
+from utils.metrics import fastp
 '''
 come form https://github.com/OptimAI-Lab/CudaForge
 '''
@@ -43,10 +45,11 @@ def test_kernel(root_dir: Path, device_idx: int = 0):
         if tag == "ok":
             metrics = data
             metrics["runnable"] = True
+            fast1 = fastp(np.array([True]), metrics["ref_latency_ms"]["avg"], metrics["test_latency_ms"]["avg"], 1, 1)
             #speedup = metrics["ref_latency_ms"]["avg"] / max(1e-9, metrics["test_latency_ms"]["avg"])
-            #metrics["score"] = speedup
+            metrics["fast1"] = fast1
         else:
-            metrics = {"runnable": False}
+            metrics = {"runnable": False,"message": data}
     else:
         metrics = {"runnable": False}
     return metrics

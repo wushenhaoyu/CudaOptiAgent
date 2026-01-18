@@ -28,16 +28,13 @@ You must:
 2. Assume the CUDA extension exposes a function with a known name
 3. Call this CUDA function inside the model's forward method
 4. Preserve the original model's input/output semantics
-
+5. Class name must be "NewModel"
 The CUDA kernel implementation itself is NOT part of your task and is assumed to exist.
 
 ---
 
-# Assumptions
-
 - The CUDA extension name is: $cuda_module_name
 - The exposed CUDA function name is: $cuda_function_name
-
 - The cuda_sources name is: kernel.cu
 - The CUDA function signature matches the original operator semantics
 - The CUDA extension compiles successfully when the correct CUDA code is provided
@@ -60,7 +57,7 @@ Your output code MUST include:
 
 # Output
 
-Only generate the complete Python code now.
+No any assumptions. Only generate the complete Python code now.
 """)
 
 

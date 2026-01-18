@@ -5,7 +5,7 @@ import re
 def strip_fence(code: str) -> str:
     code = code.strip()
     pattern = re.compile(
-        r'^```(?:python|py|cuda|cu)?\n(.*?)```$',
+        r'^```(?:python|py|cuda|cu|c|cpp)?\n(.*?)```$',
         re.MULTILINE | re.DOTALL
     )
     match = pattern.fullmatch(code)
