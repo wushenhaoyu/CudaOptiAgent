@@ -1,7 +1,7 @@
 
 from collections import defaultdict
 import contextlib
-import datetime
+
 import hashlib
 import io
 import os
@@ -13,6 +13,7 @@ import torch
 import torch.nn as nn
 import importlib.util 
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from multiprocessing import get_context
@@ -25,10 +26,10 @@ come form https://github.com/OptimAI-Lab/CudaForge
 
 
 
-def test_kernel(root_dir: Path, device_idx: int = 0):
+def test_kernel(root_dir: Path, task_dir: Path, device_idx: int = 0):
     ctx = get_context("spawn")
     parent_conn, child_conn = ctx.Pipe(duplex=False)
-    p = ctx.Process(target=test_kernel_process, args=(root_dir,device_idx,child_conn,))
+    p = ctx.Process(target=test_kernel_process, args=(root_dir, task_dir, device_idx, child_conn,))
     p.start()
     try:
         child_conn.close()
@@ -45,44 +46,69 @@ def test_kernel(root_dir: Path, device_idx: int = 0):
         if tag == "ok":
             metrics = data
             metrics["runnable"] = True
-            fast1 = fastp(np.array([True]), metrics["ref_latency_ms"]["avg"], metrics["test_latency_ms"]["avg"], 1, 1)
-            #speedup = metrics["ref_latency_ms"]["avg"] / max(1e-9, metrics["test_latency_ms"]["avg"])
-            metrics["fast1"] = fast1
+            ref  = np.array([metrics["ref_latency_ms"]["avg"]])
+            test = np.array([metrics["test_latency_ms"]["avg"]])
+            fast1 = fastp(np.array([True]), ref, test, 1, 1)
         else:
             metrics = {"runnable": False,"message": data}
     else:
         metrics = {"runnable": False}
     return metrics
             
-def test_kernel_process(root_dir: Path, device_idx: int = 0, conn = None):
+def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, conn = None):
     try:
         torch.cuda.set_device(device_idx)
-        res = _test_kernel_process(root_dir, device_idx, conn)
+        res = _test_kernel_process(root_dir, task_dir, device_idx, conn)
         conn.send(("ok", res))
+    except CompilationError as e:
+        conn.send((
+            "err",
+            {
+                "type": "compilation_error",
+                "message": str(e),   # 完整编译日志（无 Python traceback）
+            }
+        ))
+    except ValueError as e:
+        conn.send((
+            "err",
+            {
+                "type": "value_error",
+                "message": str(e),
+            }
+        ))
     except Exception as e:
-        # Clean the error message if helper is available; otherwise fall back to str(e)
-        try:
-            cleaned = _sanitize_error_message(e)
-            msg = _last_n_lines(cleaned)
-        except Exception:
-            msg = str(e)
-        conn.send(("err", msg))
+        conn.send((
+            "err",
+            {
+                "type": "runtime_error",
+                "message": str(e),
+            }
+        ))
+    #except Exception as e:
+    #    # Clean the error message if helper is available; otherwise fall back to str(e)
+    #    try:
+    #        msg = str(e)
+    #        # cleaned = _sanitize_error_message(e)
+    #        #msg = _last_n_lines(cleaned)
+    #    except Exception:
+    #        msg = str(e)
+    #    conn.send(("err", msg))
 
-def _test_kernel_process(root_dir: Path, device_idx: int = 0, conn = None):
+def _test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, conn = None):
 
     dev = torch.device(f"cuda:{device_idx}")
 
-    ref_mod , _ = _capture_import(root_dir / "ref.py")
-    test_mod , _ = _capture_import(root_dir / "entry.py")
+    ref_mod , _ = _capture_import(root_dir / "spec" / "ref.py")
+    test_mod , _ = _capture_import(root_dir / "spec" / "entry.py")
 
     RefModel = getattr(ref_mod, "Model", None)
     get_inputs = getattr(ref_mod, "get_inputs", None)
     ModelNew = getattr(test_mod, "ModelNew", None)
 
     if None in (RefModel, get_inputs):
-        raise RuntimeError(f"Reference '{root_dir / 'ref.py'}' must define Model and get_inputs().")
+        raise RuntimeError(f"Reference '{root_dir / 'spec' / 'ref.py'}' must define Model and get_inputs().")
     if ModelNew is None:
-        raise RuntimeError(f"Candidate '{root_dir / 'entry.py'}' must define class ModelNew.")
+        raise RuntimeError(f"Candidate '{root_dir / 'spec' / 'entry.py'}' must define class ModelNew.")
     
     init_args: List[Any] = []
     init_kwargs: Dict[str, Any] = {}
@@ -165,14 +191,12 @@ def _test_kernel_process(root_dir: Path, device_idx: int = 0, conn = None):
         "ref_latency_ms": {
             "avg": sum(ref_t) / len(ref_t),
             "min": min(ref_t),
-            "max": max(ref_t),
-            "all": ref_t,
+            "max": max(ref_t)
         },
         "test_latency_ms": {
             "avg": sum(test_t) / len(test_t),
             "min": min(test_t),
-            "max": max(test_t),
-            "all": test_t,
+            "max": max(test_t)
         },
         "model_init_args": init_args,
         "model_init_kwargs": init_kwargs,
@@ -368,7 +392,8 @@ def _capture_import(path: Path):
             # Combine StringIO + temp-file logs + Exception str
             fd_buf.flush(); fd_buf.seek(0)
             subproc_log = fd_buf.read()
-            full_log = "".join([py_buf.getvalue(), subproc_log, str(exc)]).strip()
+            #full_log = "".join([py_buf.getvalue(), subproc_log, str(exc)]).strip()
+            full_log = subproc_log.strip() #only beside py
             raise CompilationError(full_log) from None
 
         finally:

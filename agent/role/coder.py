@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Dict
 from agent.llm import LLM
 from agent.settings import Coder_settings
-from agent.template.coder import INIT_ENTRY_CODER_TEMPLATE, INIT_CUDA_CODER_TEMPLATE
+from agent.template.coder import INIT_CUDA_CODER_TEMPLATE_, INIT_ENTRY_CODER_TEMPLATE, INIT_CUDA_CODER_TEMPLATE
 from utils.utils import strip_fence, write_file, read_file
 
 
@@ -14,12 +14,13 @@ class Coder(LLM):
 
         super().__init__(server_name=setting["server_name"], model=setting["model"], max_tokens=setting["max_tokens"], temperature=setting["temperature"], top_p=setting["top_p"])
 
-    def generate_entry_code(self, root_dir: Path ,source_code: str, cuda_module_name: str, cuda_function_name: str):
+    def generate_entry_code(self, root_dir: Path ,source_code: str, cuda_module_name: str, cuda_function_name: str, kernel_dir: str):
 
         prompt = INIT_ENTRY_CODER_TEMPLATE.substitute(
             source_code=source_code,
             cuda_module_name=cuda_module_name,
-            cuda_function_name=cuda_function_name
+            cuda_function_name=cuda_function_name,
+            kernel_dir=kernel_dir
         )
 
         entry_code = strip_fence(self.chat(prompt))
@@ -27,21 +28,43 @@ class Coder(LLM):
         write_file(root_dir / "spec" / "entry.py", entry_code)
         
 
-    def gernerate_cuda_code(self, 
+    def gernerate_init_cuda_code(self, 
                             root_dir: Path, 
                             example_source_code: str, 
                             example_cuda_code: str, 
                             source_code: str, 
                             cuda_module_name: str, 
-                            cuda_function_name: str, 
-                            hints: str ):
+                            cuda_function_name: str):
         prompt = INIT_CUDA_CODER_TEMPLATE.substitute(
             example_source_code = example_source_code,
             example_cuda_code = example_cuda_code,
             source_code=source_code,
             cuda_module_name=cuda_module_name,
+            cuda_function_name=cuda_function_name
+        )
+
+        cuda_code = strip_fence(self.chat(prompt))
+
+        write_file(root_dir / "spec" / "kernel.cu", cuda_code)
+
+        return prompt, cuda_code
+    
+
+    def gernerate_init_cuda_code_(self, 
+                            root_dir: Path, 
+                            example_source_code: str, 
+                            example_cuda_code: str, 
+                            source_code: str, 
+                            cuda_module_name: str, 
+                            cuda_function_name: str,
+                            hints: str):
+        prompt = INIT_CUDA_CODER_TEMPLATE_.substitute(
+            example_source_code = example_source_code,
+            example_cuda_code = example_cuda_code,
+            source_code=source_code,
+            cuda_module_name=cuda_module_name,
             cuda_function_name=cuda_function_name,
-            hints = hints
+            hints=hints
         )
 
         cuda_code = strip_fence(self.chat(prompt))

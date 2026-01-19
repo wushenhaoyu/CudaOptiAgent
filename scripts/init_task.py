@@ -29,19 +29,34 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
         (task_root / "optimize").mkdir(parents=True, exist_ok=True) #optimize 放生成优化cuda代码的过程
 
         shutil.copy2(task, task_root / "spec" / "ref.py")
-        coder.generate_entry_code(task_root, read_file(task), task_name_no_num, task_name_no_num)
+        coder.generate_entry_code(task_root, read_file(task), task_name_no_num, task_name_no_num, str(task_root / "spec" / "kernel.cu"))
 
         bootstrap = Path(task_root / "bootstrap")
+
+        hints = ""
 
         for i in range(args.bootstrap_iter):
             (bootstrap / f"iter_{i}").mkdir(parents=True, exist_ok=True)
             current_dir = bootstrap / f"iter_{i}"
             if i == 0:
-                input , output = analyzer.init_analyzer(task_root, args)
-                write_file(current_dir / "analyzer_io.txt", f"Input Prompt:\n{input}\n\nOutput Response:\n{output}")
+                #input , output = analyzer.init_analyzer(task_root, args)
+                #write_file(current_dir / "analyzer_io.txt", f"Input Prompt:\n{input}\n\nOutput Response:\n{output}")
 
-                hints = extract_recommendation(output)
-                input , output = coder.gernerate_cuda_code(current_dir, 
+                #hints = extract_recommendation(output)
+                input , code = coder.gernerate_init_cuda_code(current_dir, 
+                                                           read_file('./agent/template/example/example.py'), 
+                                                           read_file('./agent/template/example/example.cu'), 
+                                                           read_file(task), 
+                                                           task_name_no_num, 
+                                                           task_name_no_num, 
+                                                           )
+                write_file(current_dir / "coder_io.txt", f"Input Prompt:\n{input}\n")
+                write_file(current_dir / "kernel.cu", code)
+                shutil.copy2(current_dir / "kernel.cu", task_root / "spec" / "kernel.cu")
+                msg = test_kernel(task_root, current_dir, args.device)
+                write_file(current_dir / "result.log", str(msg))
+            else:
+                input , code = coder.gernerate_init_cuda_code_(current_dir, 
                                                            read_file('./agent/template/example/example.py'), 
                                                            read_file('./agent/template/example/example.cu'), 
                                                            read_file(task), 
@@ -49,10 +64,16 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                                                            task_name_no_num, 
                                                            hints)
                 write_file(current_dir / "coder_io.txt", f"Input Prompt:\n{input}\n")
-                write_file(current_dir / "kernel.cu", output)
+                write_file(current_dir / "kernel.cu", code)
                 shutil.copy2(current_dir / "kernel.cu", task_root / "spec" / "kernel.cu")
-                data = test_kernel(current_dir, args.device)
-                print(data)
+                msg = test_kernel(task_root, current_dir, args.device)
+                write_file(current_dir / "result.log", str(msg))
+            if msg["runnable"] == True:
+                break
+            else:
+                input , hints = analyzer.init_repair_analyzer(task_root, str(msg), args)
+                write_file(current_dir / "analyzer_io.txt", f"Input Prompt:\n{input}\n\nOutput Response:\n{hints}")
+
 
 
 
