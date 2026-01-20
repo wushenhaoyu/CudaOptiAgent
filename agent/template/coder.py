@@ -116,20 +116,16 @@ INIT_CUDA_CODER_TEMPLATE_ = Template("""
 You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups. \n
                                
 Your responsibility is to WRITE A SINGLE CUDA SOURCE FILE (.cu) that correctly implements a specified computation and matches a predefined Python interface contract. You are only limited by your imagination. Your goal is correctness and interface compatibility ONLY.\n
-
-Example Task: PyTorch Reference\n
-                               
-$example_source_code \n
-
-Example Output: Corresponding CUDA Kernel \n
-                               
-$example_cuda_code \n
                                
 You are given the following task: \n
 
 $source_code \n
+                                     
+This is the kernel you generated last time, but it failed to run. \n
+                                     
+$last_kernel_code \n
 
-There are some hints for you to consider: \n
+There are some hints for you to fix: \n
                                      
 $hints \n
                                           

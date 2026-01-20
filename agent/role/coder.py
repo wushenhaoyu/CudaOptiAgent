@@ -45,22 +45,18 @@ class Coder(LLM):
 
         cuda_code = strip_fence(self.chat(prompt))
 
-        write_file(root_dir / "spec" / "kernel.cu", cuda_code)
-
         return prompt, cuda_code
     
 
     def gernerate_init_cuda_code_(self, 
                             root_dir: Path, 
-                            example_source_code: str, 
-                            example_cuda_code: str, 
+                            last_kernel_code: str,
                             source_code: str, 
                             cuda_module_name: str, 
                             cuda_function_name: str,
                             hints: str):
         prompt = INIT_CUDA_CODER_TEMPLATE_.substitute(
-            example_source_code = example_source_code,
-            example_cuda_code = example_cuda_code,
+            last_kernel_code=last_kernel_code,
             source_code=source_code,
             cuda_module_name=cuda_module_name,
             cuda_function_name=cuda_function_name,
@@ -68,8 +64,6 @@ class Coder(LLM):
         )
 
         cuda_code = strip_fence(self.chat(prompt))
-
-        write_file(root_dir / "spec" / "kernel.cu", cuda_code)
 
         return prompt, cuda_code
         

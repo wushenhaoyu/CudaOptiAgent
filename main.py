@@ -12,7 +12,7 @@ def build_parser():
     parser.add_argument("--model", type=str, default="deepseek-reasoner")
     parser.add_argument("--model_choice", type=int, default=0)
     parser.add_argument("--task_level", type=int, default=2, choices=[0, 1, 2, 3, 4], help="task level")
-    parser.add_argument("--task_id", type=int, default=3, help="task id")
+    parser.add_argument("--task_id", type=int, default=1, help="task id")
     parser.add_argument("--task_dir", type=str, default="./benchmark/KernelBench")
     parser.add_argument("--gpu_name", type=str, default="RTX3070Ti_Laptop", help="GPU name for hwinfo task")
     parser.add_argument("--results_dir", type=str, default="./run")
@@ -40,8 +40,9 @@ def collect_task(root: Path, task_level = 0, task_id = 0):
     return tasks
 
 def make_run_dir(base_dir: Path, server_name: str, model: str) -> Path:
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = base_dir / f"{server_name}_{model}_{stamp}"
+    #stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    #run_dir = base_dir / f"{server_name}_{model}_{stamp}"
+    run_dir = base_dir / f"{server_name}_{model}"
     run_dir.mkdir(parents=True, exist_ok=True)
     logging.info(f"Run directory created at: {run_dir}")
     return run_dir

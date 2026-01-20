@@ -1,5 +1,5 @@
 import shutil
-
+from tqdm import tqdm
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -8,7 +8,7 @@ from agent.role.coder import Coder
 from agent.role.validator import Validator
 from agent.role.planner import Planner
 
-from utils.utils import read_file, write_file, extract_recommendation
+from utils.utils import dict_to_text, read_file, write_file, extract_recommendation
 from scripts.test_kernel import test_kernel
 
 def init_task(tasks: List[Path], run_dir: Path, args: Dict):
@@ -35,7 +35,7 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
 
         hints = ""
 
-        for i in range(args.bootstrap_iter):
+        for i in tqdm(range(args.bootstrap_iter), desc="Bootstrap Iterations"):
             (bootstrap / f"iter_{i}").mkdir(parents=True, exist_ok=True)
             current_dir = bootstrap / f"iter_{i}"
             if i == 0:
@@ -43,6 +43,7 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                 #write_file(current_dir / "analyzer_io.txt", f"Input Prompt:\n{input}\n\nOutput Response:\n{output}")
 
                 #hints = extract_recommendation(output)
+                tqdm.write("gernerate_init_cuda~~")
                 input , code = coder.gernerate_init_cuda_code(current_dir, 
                                                            read_file('./agent/template/example/example.py'), 
                                                            read_file('./agent/template/example/example.cu'), 
@@ -53,12 +54,13 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                 write_file(current_dir / "coder_io.txt", f"Input Prompt:\n{input}\n")
                 write_file(current_dir / "kernel.cu", code)
                 shutil.copy2(current_dir / "kernel.cu", task_root / "spec" / "kernel.cu")
+                tqdm.write("test_kernel~~")
                 msg = test_kernel(task_root, current_dir, args.device)
                 write_file(current_dir / "result.log", str(msg))
             else:
+                tqdm.write("gernerate_init_cuda~~")
                 input , code = coder.gernerate_init_cuda_code_(current_dir, 
-                                                           read_file('./agent/template/example/example.py'), 
-                                                           read_file('./agent/template/example/example.cu'), 
+                                                           read_file(str(task_root / "spec" / "kernel.cu")), 
                                                            read_file(task), 
                                                            task_name_no_num, 
                                                            task_name_no_num, 
@@ -66,11 +68,13 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                 write_file(current_dir / "coder_io.txt", f"Input Prompt:\n{input}\n")
                 write_file(current_dir / "kernel.cu", code)
                 shutil.copy2(current_dir / "kernel.cu", task_root / "spec" / "kernel.cu")
+                tqdm.write("test_kernel~~")
                 msg = test_kernel(task_root, current_dir, args.device)
-                write_file(current_dir / "result.log", str(msg))
+                write_file(current_dir / "result.log", dict_to_text(msg))
             if msg["runnable"] == True:
                 break
             else:
+                tqdm.write("analyzer_generate_repair_cuda~~")
                 input , hints = analyzer.init_repair_analyzer(task_root, str(msg), args)
                 write_file(current_dir / "analyzer_io.txt", f"Input Prompt:\n{input}\n\nOutput Response:\n{hints}")
 

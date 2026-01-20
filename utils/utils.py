@@ -1,5 +1,6 @@
 import os
 import re
+import textwrap
 
 
 def strip_fence(code: str) -> str:
@@ -54,3 +55,20 @@ def _sanitize_error_message(exc: Exception) -> str:
     if _INVOCATION_SPLITTER in msg:
         msg = msg.split(_INVOCATION_SPLITTER, 1)[0].rstrip()
     return msg
+
+def dict_to_text(obj, indent=0):
+    prefix = "  " * indent
+    if isinstance(obj, dict):
+        lines = []
+        for k, v in obj.items():
+            if isinstance(v, str) and "\n" in v:
+                lines.append(f"{prefix}{k}:")
+                lines.append(textwrap.indent(v.rstrip(), prefix + "  "))
+            else:
+                lines.append(f"{prefix}{k}: {dict_to_text(v, indent + 1).lstrip()}")
+        return "\n".join(lines)
+    if isinstance(obj, list):
+        return "\n".join(f"{prefix}- {dict_to_text(item, indent + 1).lstrip()}" for item in obj)
+    if isinstance(obj, str):
+        return obj.replace('\\n', '\n')
+    return str(obj)
