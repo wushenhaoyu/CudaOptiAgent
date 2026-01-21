@@ -26,30 +26,51 @@ class Coder(LLM):
         entry_code = strip_fence(self.chat(prompt))
 
         write_file(root_dir / "spec" / "entry.py", entry_code)
+
+    def repair_entry_code(self, root_dir: Path ,source_code: str, cuda_module_name: str, cuda_function_name: str, kernel_dir: str, error_report: str):
+
+        prompt = INIT_ENTRY_CODER_TEMPLATE.substitute(
+            source_code=source_code,
+            cuda_module_name=cuda_module_name,
+            cuda_function_name=cuda_function_name,
+            kernel_dir=kernel_dir,
+            error_report=error_report
+        )
+
+        entry_code = strip_fence(self.chat(prompt))
+
+        write_file(root_dir / "spec" / "entry.py", entry_code)
         
 
     def gernerate_init_cuda_code(self, 
-                            root_dir: Path, 
+                            current_dir: Path, 
                             example_source_code: str, 
                             example_cuda_code: str, 
                             source_code: str, 
+                            entry_code:str,
                             cuda_module_name: str, 
                             cuda_function_name: str):
         prompt = INIT_CUDA_CODER_TEMPLATE.substitute(
             example_source_code = example_source_code,
             example_cuda_code = example_cuda_code,
             source_code=source_code,
+            entry_code=entry_code,
             cuda_module_name=cuda_module_name,
             cuda_function_name=cuda_function_name
         )
 
-        cuda_code = strip_fence(self.chat(prompt))
+        write_file(current_dir / "coder_io.txt", f"Input Prompt:\n{prompt}\n")
 
-        return prompt, cuda_code
+        cuda_code = strip_fence(self.chat(prompt))
+        
+        write_file(current_dir / "kernel.cu", cuda_code)
+
+        
+
     
 
     def gernerate_init_cuda_code_(self, 
-                            root_dir: Path, 
+                            current_dir: Path, 
                             last_kernel_code: str,
                             source_code: str, 
                             cuda_module_name: str, 
@@ -63,7 +84,10 @@ class Coder(LLM):
             hints=hints
         )
 
+        write_file(current_dir / "coder_io.txt", f"Input Prompt:\n{prompt}\n")
+
         cuda_code = strip_fence(self.chat(prompt))
 
-        return prompt, cuda_code
+        write_file(current_dir / "kernel.cu", cuda_code)
+
         

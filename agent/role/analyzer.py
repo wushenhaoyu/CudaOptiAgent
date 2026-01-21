@@ -15,14 +15,17 @@ class Analyzer(LLM):
 
         super().__init__(server_name=setting["server_name"], model=setting["model"], max_tokens=setting["max_tokens"], temperature=setting["temperature"], top_p=setting["top_p"])
 
-    def init_repair_analyzer(self, root_dir: Path, error_log: str, args: Dict):
+    def init_repair_analyzer(self, root_dir: Path, current_dir: Path, error_report: str, args: Dict):
         #gpu_info = GPU_SPEC_INFO.get(args.gpu_name)
         prompt = INIT_REPAIR_ANALYZER_TEMPLATE.substitute(
             source_code=read_file(root_dir / "spec" / "ref.py"),
             kernel_code=read_file(root_dir / "spec" / "kernel.cu"),
-            error_log=error_log,
+            error_report=error_report,
         )
+
         out = self.chat(prompt)
-        return prompt, out
+        write_file(current_dir / "analyzer_io.txt", f"Input Prompt:\n{prompt}\n\nOutput Response:\n{out}")
+        return out
+
     
         

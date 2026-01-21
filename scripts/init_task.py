@@ -34,49 +34,65 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
         bootstrap = Path(task_root / "bootstrap")
 
         hints = ""
+        error_report = None
 
         for i in tqdm(range(args.bootstrap_iter), desc="Bootstrap Iterations"):
+            msg = {}
             (bootstrap / f"iter_{i}").mkdir(parents=True, exist_ok=True)
             current_dir = bootstrap / f"iter_{i}"
             if i == 0:
-                #input , output = analyzer.init_analyzer(task_root, args)
-                #write_file(current_dir / "analyzer_io.txt", f"Input Prompt:\n{input}\n\nOutput Response:\n{output}")
-
-                #hints = extract_recommendation(output)
-                tqdm.write("gernerate_init_cuda~~")
-                input , code = coder.gernerate_init_cuda_code(current_dir, 
-                                                           read_file('./agent/template/example/example.py'), 
-                                                           read_file('./agent/template/example/example.cu'), 
-                                                           read_file(task), 
-                                                           task_name_no_num, 
-                                                           task_name_no_num, 
-                                                           )
-                write_file(current_dir / "coder_io.txt", f"Input Prompt:\n{input}\n")
-                write_file(current_dir / "kernel.cu", code)
-                shutil.copy2(current_dir / "kernel.cu", task_root / "spec" / "kernel.cu")
-                tqdm.write("test_kernel~~")
-                msg = test_kernel(task_root, current_dir, args.device)
-                write_file(current_dir / "result.log", str(msg))
+                tqdm.write("gernerate_init_cuda")
+                coder.gernerate_init_cuda_code(current_dir, 
+                                                read_file('./agent/template/example/example.py'), 
+                                                read_file('./agent/template/example/example.cu'), 
+                                                read_file(task), 
+                                                read_file(task_root / "spec" / "entry.py"),
+                                                task_name_no_num, 
+                                                task_name_no_num, 
+                                                )
             else:
-                tqdm.write("gernerate_init_cuda~~")
-                input , code = coder.gernerate_init_cuda_code_(current_dir, 
-                                                           read_file(str(task_root / "spec" / "kernel.cu")), 
-                                                           read_file(task), 
-                                                           task_name_no_num, 
-                                                           task_name_no_num, 
-                                                           hints)
-                write_file(current_dir / "coder_io.txt", f"Input Prompt:\n{input}\n")
-                write_file(current_dir / "kernel.cu", code)
-                shutil.copy2(current_dir / "kernel.cu", task_root / "spec" / "kernel.cu")
-                tqdm.write("test_kernel~~")
+                tqdm.write("gernerate_init_repair_analyzer")
+                hints = analyzer.init_repair_analyzer(task_root, current_dir, str(error_report), args)
+                tqdm.write("gernerate_init_cuda")
+                coder.gernerate_init_cuda_code_(current_dir, 
+                                                read_file(str(task_root / "spec" / "kernel.cu")), 
+                                                read_file(task), 
+                                                task_name_no_num, 
+                                                task_name_no_num, 
+                                                hints)
+            shutil.copy2(current_dir / "kernel.cu", task_root / "spec" / "kernel.cu")
+            while True:
+                tqdm.write("test_kernel")
                 msg = test_kernel(task_root, current_dir, args.device)
                 write_file(current_dir / "result.log", dict_to_text(msg))
+                if msg["runnable"] == True:
+                    break
+                error_report = validator.init_validator(
+                    current_dir,
+                    read_file(task_root / "spec" / "ref.py"),
+                    read_file(task_root / "spec" / "entry.py"),
+                    read_file(task_root / "spec" / "kernel.cu"),
+                    read_file(current_dir / "result.log")
+                )
+                if error_report['ERROR_FILE'] == "entry.py":
+                    coder.repair_entry_code(
+                        task_root,
+                        read_file(task),
+                        task_name_no_num,
+                        task_name_no_num,
+                        str(task_root / "spec" / "kernel.cu"),
+                        str(error_report)
+                    )
+                    continue
+                else:
+                    break
+
             if msg["runnable"] == True:
                 break
-            else:
-                tqdm.write("analyzer_generate_repair_cuda~~")
-                input , hints = analyzer.init_repair_analyzer(task_root, str(msg), args)
-                write_file(current_dir / "analyzer_io.txt", f"Input Prompt:\n{input}\n\nOutput Response:\n{hints}")
+
+                
+                #input , hints = analyzer.init_repair_analyzer(task_root, str(msg), args)
+                #write_file(current_dir / "analyzer_io.txt", f"Input Prompt:\n{input}\n\nOutput Response:\n{hints}")
 
 
 

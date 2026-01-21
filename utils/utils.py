@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import textwrap
@@ -43,6 +44,10 @@ def write_file(file_path: str, content: str, encoding: str = "utf-8") -> bool:
 def extract_recommendation(text: str) -> str:
     m = re.search(r'\[recommendation\]\s*(.*?)\s*(?:\[\w+]|$)', text, flags=re.S)
     return m.group(1).strip() if m else "none"
+
+def extract_error_report(text: str):
+    m = re.search(r'\[ERROR_REPORT\]\s*\n({.*?})\n', text, flags=re.S)
+    return json.loads(m.group(1)) if m else None
 
 def _last_n_lines(text: str, n: int = 150) -> str:
     lines = text.splitlines()

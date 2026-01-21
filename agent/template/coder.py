@@ -32,7 +32,6 @@ You must:
 6. The exposed CUDA function name is: $cuda_function_name
 7. The sources name is included as $kernel_dir, please do NOT change it
 8. The generated class must have methods with the same names as those in the given task class and must not include any extra ones.
-9. 
                                    
 ---
 
@@ -40,6 +39,43 @@ You must:
 
 No any assumptions. Only generate the complete Python code now.
 """)
+
+REPAIR_ENTRY_CODER_TEMPLATE = Template("""
+You are a Python interface engineer responsible for generating the Python entry code
+that connects a PyTorch model to a custom CUDA extension.
+
+You do NOT write CUDA kernels.
+You do NOT optimize algorithms.
+You ONLY generate the Python-side interface code.
+
+---
+
+You are given the original PyTorch model code:
+
+$source_code
+                                       
+Here is your generated entry code, but it needs to be fixed:
+
+$entry_code
+                                       
+Here is some useful information for you:
+                                       
+$error_report
+
+---
+You must:
+1. Load a CUDA extension using torch.utils.cpp_extension.load
+2. Call this CUDA function inside the model's forward method
+3. Preserve the original model's input/output semantics
+4. Class name must be "ModelNew"
+5. The CUDA extension name is: $cuda_module_name
+6. The exposed CUDA function name is: $cuda_function_name
+7. The sources name is included as $kernel_dir, please do NOT change it
+8. The generated class must have methods with the same names as those in the given task class and must not include any extra ones.
+                                       
+# Output                               
+No any assumptions. Only generate the complete Python code now."""
+)
 
 
 # One Shot 
@@ -101,6 +137,10 @@ $example_cuda_code \n
 You are given the following task: \n
 
 $source_code \n
+                                    
+the entry python code has alreadt provided for you, you need to adapt to the entry python code.
+                                    
+$entry_code \n
                                           
 # Output Requirements 
 - Output ONLY the contents of a single .cu file

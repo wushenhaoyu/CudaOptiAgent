@@ -2,7 +2,7 @@ from string import Template
 
 INIT_ERROR_VALIDATOR_TEMPLATE = Template("""
 # Role Description
-You are an expert CUDA kernel debugging specialist.Your goal is to analyze compilation errors, runtime errors, or correctness failures, and precisely identify the most likely root cause and the kernel region responsible.
+You are an expert CUDA kernel debugging specialist.Your goal is to analyze compilation errors, runtime errors, or correctness failures, and precisely identify the most likely root cause and the code region responsible.
                                          
 ---
 
@@ -10,15 +10,15 @@ You are given the following information:
 
 ## Original Task Definition (PyTorch Reference)
 $source_code
+                                         
+## Generated Python Entry Code
+$entry_code
 
 ## Generated CUDA Kernel Code
 $kernel_code
 
-## Compilation Output
-$compile_log
-
-## Correctness Test Result
-$test_result
+## error Output
+$error_log
 
 ---
 
@@ -40,25 +40,18 @@ After reasoning, you MUST output your result using the exact structured format b
 [THINKING]
 <Your internal reasoning about what went wrong and why.
 This section may be verbose and exploratory.>
-
 [ERROR_REPORT]
 {
-  "ROOT_CAUSE": "concise description of the most likely cause",
-  "SUSPECTED_REGION": "specific kernel region or concept",
-  "EVIDENCE": [
-    "key error message, line pattern, or symptom"
-  ],
-  "SUGGESTED_FIX_DIRECTION": [
-    "high-level fix direction, not code",
-    "another possible fix direction"
-  ]
+  "ERROR_TYPE": "<compile_error | runtime_error | semantic_mismatch | unknown>",
+  "ERROR_FILE": "<entry.py | kernel.cu>",
+  "KEY_ERROR_EXCERPT": "<concise, relevant excerpt from the error log>",
+  "ROOT_CAUSE": "<clear explanation of the underlying issue>"
 }
 
 ---
 
 # Rules and Constraints
 
-- Do NOT include CUDA code or pseudocode.
 - Do NOT suggest specific line-by-line edits.
 - Do NOT mention performance or optimization.
 - Focus strictly on correctness and safety.
@@ -68,3 +61,4 @@ This section may be verbose and exploratory.>
 Output ONLY the two sections defined above.
 Do NOT add any text before or after them.
 """)
+

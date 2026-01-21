@@ -37,7 +37,7 @@ $kernel_code
 
 Compilation and/or runtime errors observed during execution:
 
-$error_log
+$error_report
 
 ---
 
@@ -66,12 +66,13 @@ Downstream systems will ONLY read the recommendation section.
 <Your internal analysis of what went wrong and why. This section may be verbose.>
 
 [recommendation]
-ERROR_CLASS: <compile | interface | indexing | launch | semantic | unknown>
-ROOT_CAUSE: <concise description of the most likely issue>
-AFFECTED_REGION: <specific kernel region or concept>
-NEXT_STEP_GUIDANCE:
-- <actionable, high-level change for the next CUDA generation>
-- <optional second guidance>
+ERROR_TYPE: <compile_error | runtime_error | semantic_mismatch | unknown>
+KEY_ERROR_EXCERPT: <concise, relevant excerpt from the error log>
+ROOT_CAUSE: <clear explanation of the underlying issue>
+MODIFICATION_GUIDANCE:
+- <primary actionable change for the next kernel generation>
+- <secondary or complementary change if applicable>
+- <additional guidance as needed>
 
 ---
 

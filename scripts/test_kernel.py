@@ -65,7 +65,7 @@ def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, con
             "err",
             {
                 "type": "compilation_error",
-                "message": str(e),   # 完整编译日志（无 Python traceback）
+                "message": str(e),   
             }
         ))
     except ValueError as e:
@@ -392,8 +392,8 @@ def _capture_import(path: Path):
             # Combine StringIO + temp-file logs + Exception str
             fd_buf.flush(); fd_buf.seek(0)
             subproc_log = fd_buf.read()
-            #full_log = "".join([py_buf.getvalue(), subproc_log, str(exc)]).strip()
-            full_log = subproc_log.strip() #only beside py
+            full_log = "".join([py_buf.getvalue(), subproc_log, str(exc)]).strip()
+            #full_log = subproc_log.strip() #only beside py
             raise CompilationError(full_log) from None
 
         finally:
@@ -473,3 +473,4 @@ def _try_map_shape_and_copy_(dst: torch.Tensor, src: torch.Tensor) -> bool:
         return True
 
     return False
+
