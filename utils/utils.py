@@ -41,13 +41,23 @@ def write_file(file_path: str, content: str, encoding: str = "utf-8") -> bool:
         print(f"Error writing file {file_path}: {e}")
         return False
     
-def extract_recommendation(text: str) -> str:
-    m = re.search(r'\[recommendation\]\s*(.*?)\s*(?:\[\w+]|$)', text, flags=re.S)
-    return m.group(1).strip() if m else "none"
+def extract_recommendation(text: str) -> dict:
+    m = re.search(r'\[recommendation]\s*(\{.*?\})\s*\[/recommendation]', text, flags=re.S)
+    if not m:
+        return {}
+    try:
+        return json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return {}
 
-def extract_error_report(text: str):
-    m = re.search(r'\[ERROR_REPORT\]\s*\n({.*?})\n', text, flags=re.S)
-    return json.loads(m.group(1)) if m else None
+def extract_error_report(text: str) -> dict:
+    m = re.search(r'\[ERROR_REPORT]\s*(\{.*?\})\s*\[/ERROR_REPORT]', text, flags=re.S)
+    if not m:
+        return {}
+    try:
+        return json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return {}
 
 def _last_n_lines(text: str, n: int = 150) -> str:
     lines = text.splitlines()

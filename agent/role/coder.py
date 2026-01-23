@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Dict
 from agent.llm import LLM
 from agent.settings import Coder_settings
-from agent.template.coder import INIT_CUDA_CODER_TEMPLATE_, INIT_ENTRY_CODER_TEMPLATE, INIT_CUDA_CODER_TEMPLATE
+from agent.template.coder import INIT_CPU_CODER_TEMPLATE, INIT_ENTRY_CODER_TEMPLATE, INIT_CUDA_CODER_TEMPLATE, REPAIR_CPU_CODER_TEMPLATE, REPAIR_CUDA_CODER_TEMPLATE
 from utils.utils import strip_fence, write_file, read_file
 
 
@@ -13,6 +13,30 @@ class Coder(LLM):
         setting = Coder_settings[setting_id]
 
         super().__init__(server_name=setting["server_name"], model=setting["model"], max_tokens=setting["max_tokens"], temperature=setting["temperature"], top_p=setting["top_p"])
+
+    def generate_init_cpu_code(self, current_dir: Path, source_code: str, entry_code: str):
+
+        prompt = INIT_CPU_CODER_TEMPLATE.substitute(
+            source_code=source_code,
+            entry_code=entry_code
+        )
+
+        cpu_code = strip_fence(self.chat(prompt))
+
+        write_file(current_dir/ "kernel.cu", cpu_code)
+
+    def repair_init_cpu_code(self, current_dir: Path, last_cpu_code: str, source_code: str, entry_code: str, hints: str):
+
+        prompt = REPAIR_CPU_CODER_TEMPLATE.substitute(
+            last_cpu_code=last_cpu_code,
+            source_code=source_code,
+            entry_code=entry_code,
+            hints=hints
+        )
+
+        cpu_code = strip_fence(self.chat(prompt))
+
+        write_file(current_dir/ "kernel.cu", cpu_code)
 
     def generate_entry_code(self, root_dir: Path ,source_code: str, cuda_module_name: str, cuda_function_name: str, kernel_dir: str):
 
@@ -69,14 +93,14 @@ class Coder(LLM):
 
     
 
-    def gernerate_init_cuda_code_(self, 
+    def repair_init_cuda_code(self, 
                             current_dir: Path, 
                             last_kernel_code: str,
                             source_code: str, 
                             cuda_module_name: str, 
                             cuda_function_name: str,
                             hints: str):
-        prompt = INIT_CUDA_CODER_TEMPLATE_.substitute(
+        prompt = REPAIR_CUDA_CODER_TEMPLATE.substitute(
             last_kernel_code=last_kernel_code,
             source_code=source_code,
             cuda_module_name=cuda_module_name,

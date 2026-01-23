@@ -178,8 +178,9 @@ def _test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, co
 
             torch.cuda.synchronize(dev)
 
+    except ValueError:
+        raise
     except Exception:
-        # Re-raise full traceback (captured by the caller)
         import traceback as _tb
         raise RuntimeError(_tb.format_exc()) from None
 
