@@ -83,7 +83,7 @@ def _test_cpu_process(root_dir: Path, task_dir: Path, device_idx: int = 0,conn =
     test_mod , _ = _capture_import(root_dir / "spec" / "entry.py")
 
     RefModel = getattr(ref_mod, "Model", None)
-    get_inputs = getattr(ref_mod, "get_inputs", None)
+    get_inputs = getattr(test_mod, "get_inputs", None)
     ModelNew = getattr(test_mod, "ModelNew", None)
 
     if None in (RefModel, get_inputs):
@@ -157,6 +157,8 @@ def _test_cpu_process(root_dir: Path, task_dir: Path, device_idx: int = 0,conn =
     except Exception:
         import traceback as _tb
         raise RuntimeError(_tb.format_exc()) from None   
+    result: Dict[str, Any] = {}
+    return result
     
 def _run_once_cpu(model: nn.Module, inputs: List[Any]) -> Tuple[Any, float]:
     model.eval()

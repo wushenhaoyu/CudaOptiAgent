@@ -96,13 +96,13 @@ class Coder(LLM):
     def repair_init_cuda_code(self, 
                             current_dir: Path, 
                             last_kernel_code: str,
-                            source_code: str, 
+                            cpu_code: str, 
                             cuda_module_name: str, 
                             cuda_function_name: str,
                             hints: str):
         prompt = REPAIR_CUDA_CODER_TEMPLATE.substitute(
             last_kernel_code=last_kernel_code,
-            source_code=source_code,
+            cpu_code=cpu_code,
             cuda_module_name=cuda_module_name,
             cuda_function_name=cuda_function_name,
             hints=hints

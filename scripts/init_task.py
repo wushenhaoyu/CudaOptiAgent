@@ -36,6 +36,7 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
         hints = ""
         error_report = None
         for i in tqdm(range(args.bootstrap_iter), desc="cpu Iterations"):
+            msg = {}
             (cpu / f"iter_{i}").mkdir(parents=True, exist_ok=True)
             current_dir = cpu / f"iter_{i}"
             if i == 0:
@@ -48,6 +49,7 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                 msg = test_cpu(task_root, current_dir, args.device)
                 write_file(current_dir / "result.log", dict_to_text(msg))
                 if msg["runnable"] == True:
+                    shutil.copy2(current_dir / "kernel.cu", task_root / "cpu" / "final.cu")
                     break
                 error_report = validator.init_cpu_validator(
                     current_dir,
@@ -67,7 +69,7 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                     continue
                 else:
                     break
-        if msg["runnable"] == True:
+            if msg["runnable"] == True:
                 break
                
 
@@ -89,7 +91,7 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                 tqdm.write("gernerate_init_cuda")
                 coder.repair_init_cuda_code(current_dir, 
                                             read_file(str(task_root / "spec" / "kernel.cu")), 
-                                            read_file(task), 
+                                            read_file(str(task_root / "cpu" / "final.cu")), 
                                             task_name_no_num, 
                                             task_name_no_num, 
                                             str(error_report))

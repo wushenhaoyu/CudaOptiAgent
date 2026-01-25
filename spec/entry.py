@@ -1,25 +1,33 @@
 import torch
 import torch.nn as nn
-import torch.utils.cpp_extension as cpp_ext
+import hashlib
+import os
+from torch.utils.cpp_extension import load
 
-# Load the CUDA extension
-cuda_extension = cpp_ext.load(
-    name='Square_matrix_multiplication_',
-    sources=[r'D:\data\design\code\CudaOptiAgent\run\deepseek_deepseek-reasoner\level1\1_Square_matrix_multiplication_\spec\kernel.cu'],
+# Compute hash of kernel.cu file
+kernel_path = r"kernel.cu"
+with open(kernel_path, 'rb') as f:
+    file_hash = hashlib.md5(f.read()).hexdigest()
+
+# Load CUDA extension with hash-based name
+extension_name = f"square_matrix_multiplication_{file_hash}"
+cuda_extension = load(
+    name=extension_name,
+    sources=[kernel_path],
     verbose=False
 )
 
 class ModelNew(nn.Module):
     """
     Simple model that performs a single square matrix multiplication (C = A * B)
-    using custom CUDA extension.
+    using custom CUDA extension
     """
     def __init__(self):
         super(ModelNew, self).__init__()
     
     def forward(self, A: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
         """
-        Performs the matrix multiplication using custom CUDA kernel.
+        Performs the matrix multiplication using CUDA extension.
 
         Args:
             A (torch.Tensor): Input matrix A of shape (N, N).
@@ -30,7 +38,7 @@ class ModelNew(nn.Module):
         """
         return cuda_extension.Square_matrix_multiplication_(A, B)
 
-N = 2048 * 2
+N = 16
 
 def get_inputs():
     A = torch.rand(N, N)
@@ -39,11 +47,3 @@ def get_inputs():
 
 def get_init_inputs():
     return []  # No special initialization inputs needed
-
-if __name__ == '__main__':
-    model = ModelNew()
-    inputs = get_inputs()
-    init_inputs = get_init_inputs()
-    model(*init_inputs)
-    model(*inputs)
-    print(model(*inputs))

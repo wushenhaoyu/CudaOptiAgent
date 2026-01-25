@@ -35,5 +35,6 @@ class Validator(LLM):
             error_log=error_log
         )
         out = self.chat(prompt)
+        write_file(current_dir / "validator_io.txt", out)
         error_report = extract_error_report(out)
         return error_report

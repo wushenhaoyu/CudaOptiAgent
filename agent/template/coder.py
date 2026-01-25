@@ -20,7 +20,7 @@ $source_code
 # Task
 
 Your task is to generate a NEW PyTorch model class that replaces specific PyTorch operators
-with calls to a custom CUDA extension.The CUDA kernel implementation itself is NOT part of your task and is assumed to exist.
+with calls to a custom CUDA extension. The CUDA kernel implementation itself is NOT part of your task and is assumed to exist.
 
 You must:
 
@@ -28,16 +28,22 @@ You must:
 2. Call this CUDA function inside the model's forward method
 3. Preserve the original model's input/output semantics
 4. Class name must be "ModelNew"
-5. The CUDA extension name is: $cuda_module_name
-6. The exposed CUDA function name is: $cuda_function_name
-7. The sources name is included as $kernel_dir, please do NOT change it
-8. The generated class must have methods with the same names as those in the given task class and must not include any extra ones.
-                                   
+5. The exposed CUDA function name is: $cuda_function_name
+6. The sources name is included as $kernel_dir, please do NOT change it
+7. The generated class must have methods with the same names as those in the given task class and must not include any extra ones.
+
+IMPORTANT:
+The CUDA extension name MUST be derived from the CONTENT HASH of the file at $kernel_dir.
+You must read the file, compute a hash (e.g. md5 or sha1), and use this hash as part of the name
+passed to torch.utils.cpp_extension.load, so that changing kernel.cu automatically triggers recompilation.
+
 ---
 
 # Output
 
 No any assumptions. Only generate the complete Python code now.
+
+NOTE: Reduce computation for CPU testing by modifying ALL variables affecting tensor sizes (global vars like N/batch_size/channels/dims AND get_init_inputs() return values). Keep tensors small (e.g., <1000 elements).
 """)
 
 REPAIR_ENTRY_CODER_TEMPLATE = Template("""
@@ -157,9 +163,9 @@ You write custom CUDA kernels to replace the pytorch operators in the given arch
                                
 Your responsibility is to WRITE A SINGLE CUDA SOURCE FILE (.cu) that correctly implements a specified computation and matches a predefined Python interface contract. You are only limited by your imagination. Your goal is correctness and interface compatibility ONLY.\n
                                
-You are given the following task: \n
+Here are correct cpu implements: \n
 
-$source_code \n
+$cpu_code \n
                                      
 This is the kernel you generated last time, but it failed to run. \n
                                      
