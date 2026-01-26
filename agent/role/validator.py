@@ -14,9 +14,9 @@ class Validator(LLM):
 
         super().__init__(server_name=setting["server_name"], model=setting["model"], max_tokens=setting["max_tokens"], temperature=setting["temperature"], top_p=setting["top_p"])
 
-    def init_cuda_validator(self, current_dir: Path, source_code: str, entry_code: str, kernel_code: str, error_log: str):
+    def init_cuda_validator(self, current_dir: Path, cpu_code: str, entry_code: str, kernel_code: str, error_log: str):
         prompt = INIT_CUDA_ERROR_VALIDATOR_TEMPLATE.substitute(
-            source_code=source_code,
+            cpu_code=cpu_code,
             entry_code=entry_code,
             kernel_code=kernel_code,
             error_log=error_log

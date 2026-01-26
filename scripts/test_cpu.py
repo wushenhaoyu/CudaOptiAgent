@@ -93,10 +93,10 @@ def _test_cpu_process(root_dir: Path, task_dir: Path, device_idx: int = 0,conn =
     init_args: List[Any] = []
     init_kwargs: Dict[str, Any] = {}
 
-    get_init_inputs_ref = getattr(ref_mod, "get_init_inputs", None)
+    get_init_inputs_entry = getattr(test_mod, "get_init_inputs", None)
 
-    if callable(get_init_inputs_ref):
-        init_obj = get_init_inputs_ref()
+    if callable(get_init_inputs_entry):
+        init_obj = get_init_inputs_entry()
         if isinstance(init_obj, dict):
             init_kwargs = dict(init_obj)
         elif isinstance(init_obj, (list, tuple)):

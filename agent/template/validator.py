@@ -8,8 +8,8 @@ You are an expert CUDA kernel debugging specialist.Your goal is to analyze compi
 
 You are given the following information:
 
-## Original Task Definition (PyTorch Reference)
-$source_code
+## C backend implementation
+$cpu_code
                                          
 ## Generated Python Entry Code
 $entry_code
@@ -152,7 +152,7 @@ This section may be verbose and exploratory.>
 - Focus strictly on correctness and interface consistency.
 - If information is insufficient, explicitly state "unknown".
 - Do NOT invent errors or speculate beyond evidence.
-
+- If both the C backend and entry code could be at fault, prioritize fixing the entry code.
 Output ONLY the two sections above.
 Do NOT add any text before or after them.
 """)

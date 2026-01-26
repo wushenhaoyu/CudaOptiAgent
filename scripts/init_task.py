@@ -97,11 +97,12 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                                             str(error_report))
             shutil.copy2(current_dir / "kernel.cu", task_root / "spec" / "kernel.cu")
             msg = test_kernel(task_root, current_dir, args.device)
+            write_file(current_dir / "result.log", dict_to_text(msg))
             if msg["runnable"] == True:
                     break
             error_report = validator.init_cuda_validator(
                     current_dir,
-                    read_file(task_root / "spec" / "ref.py"),
+                    read_file(str(task_root / "cpu" / "final.cu")),
                     read_file(task_root / "spec" / "entry.py"),
                     read_file(task_root / "spec" / "kernel.cu"),
                     read_file(current_dir / "result.log")

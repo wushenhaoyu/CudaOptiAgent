@@ -31,17 +31,20 @@ class LLM:
         self.top_p = top_p
 
     def chat(self, user: str, system: str = "You are a helpful CUDA optimization assistant.") -> str:
-        resp = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user}
-            ],
-            max_tokens=self.max_tokens,
-            temperature=self.temperature,
-            top_p=self.top_p
-        )
-        return resp.choices[0].message.content
+        while True:
+            resp = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user}
+                ],
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                top_p=self.top_p
+            )
+            if resp.choices[0].message.content == "":
+                continue
+            return resp.choices[0].message.content
     
     def change_temperature(self, temperature: float) -> None:
         self.temperature = temperature
