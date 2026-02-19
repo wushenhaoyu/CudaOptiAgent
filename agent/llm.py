@@ -57,3 +57,6 @@ class LLM:
                     system: str = "You are a helpful CUDA optimization assistant.") -> str:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self.chat, user, system)
+    
+if __name__ == "__main__":
+    print(GEMINI_KEY)

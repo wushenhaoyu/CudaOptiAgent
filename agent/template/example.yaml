@@ -1,0 +1,18 @@
+operators:
+- name: ["conv2d", "relu", "elementwise_add"]
+  shapes: 
+    inputs: [128, 64, 128, 128] # [batch, in_channels, in_height, in_width]
+    outputs: [128, 64, 128, 128] # [batch, out_channels, out_height, out_width]
+    weights: [64, 64, 3, 3] # [out_channels, in_channels, kernel_height, kernel_width]
+    conv_bias: [64] # [out_channels]
+    bias: [64] # [out_channels]
+  params:
+    padding: 0
+    stride: 1
+    dilation: 1
+  current_impl:
+   memory_access:
+    inputs: global
+    outputs: global
+    weights: global
+    bias: global

@@ -2,8 +2,74 @@ import json
 import os
 import re
 import textwrap
+from typing import Dict
 
+def text_to_dict(text: str) -> Dict:
+    """
+    Parse text format log/dict into Python dict.
+    Supports formats like:
+    - key: value
+    - key=value
+    - JSON format
+    """
 
+    
+    result = {}
+    text = text.strip()
+    
+    # Try JSON first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    
+    # Parse line by line
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Skip separators like "---"
+        if set(line) <= set('-=#'):
+            continue
+        
+        # Try key: value format
+        if ':' in line:
+            key, value = line.split(':', 1)
+            key = key.strip()
+            value = value.strip()
+            
+            # Try to parse value
+            if value.lower() == 'true':
+                value = True
+            elif value.lower() == 'false':
+                value = False
+            elif value.isdigit() or (value.startswith('-') and value[1:].isdigit()):
+                value = int(value)
+            elif re.match(r'^-?\d+\.\d+$', value):
+                value = float(value)
+            
+            result[key] = value
+            
+        # Try key=value format
+        elif '=' in line:
+            key, value = line.split('=', 1)
+            key = key.strip()
+            value = value.strip()
+            
+            # Parse value
+            if value.lower() == 'true':
+                value = True
+            elif value.lower() == 'false':
+                value = False
+            elif value.isdigit() or (value.startswith('-') and value[1:].isdigit()):
+                value = int(value)
+            elif re.match(r'^-?\d+\.\d+$', value):
+                value = float(value)
+            
+            result[key] = value
+    
+    return result
 def strip_fence(code: str) -> str:
     code = code.strip()
     pattern = re.compile(
@@ -21,7 +87,7 @@ def read_file(file_path) -> str:
         return ""
     
     try:
-        with open(file_path, "r") as file:
+        with open(file_path, "r", encoding='utf-8') as file:
             return file.read()
     except Exception as e:
         print(f"Error reading file {file_path}: {e}")

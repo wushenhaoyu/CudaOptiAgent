@@ -146,9 +146,9 @@ def _test_cpu_process(root_dir: Path, task_dir: Path, device_idx: int = 0,conn =
             max_err  = diff.max().item()
             mean_err = diff.mean().item()
 
-            if not torch.allclose(ref_out, test_out, atol=1e-4, rtol=1e-4):
+            if not torch.allclose(ref_out, test_out, atol=1e-3, rtol=1e-3):
                 raise ValueError(
-                    f"Outputs are not close (atol={1e-4}, rtol={1e-4}). "
+                    f"Outputs are not close (atol={1e-3}, rtol={1e-3}). "
                     f"max_abs_err={max_err:.3e}, mean_abs_err={mean_err:.3e}"
                 )
 

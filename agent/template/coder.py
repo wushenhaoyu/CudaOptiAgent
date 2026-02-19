@@ -3,58 +3,36 @@ from string import Template
 
 INIT_ENTRY_CODER_TEMPLATE = Template("""
 You are a Python interface engineer responsible for generating the Python entry code
-that connects a PyTorch model to a custom CUDA extension.
-
-You do NOT write CUDA kernels.
-You do NOT optimize algorithms.
-You ONLY generate the Python-side interface code.
-
----
-
+that connects a PyTorch model to a custom CUDA extension.The CUDA kernel implementation itself is NOT part of your task and is assumed to exist.
+Here are example PyTorch model code:
+                                     
+$example_source_code
+                                     
+Here are exmaple entry code:
+                                     
+$example_entry_code
+                                     
 You are given the original PyTorch model code:
 
 $source_code
 
----
-
-# Task
-
-Your task is to generate a NEW PyTorch model class that replaces specific PyTorch operators
-with calls to a custom CUDA extension. The CUDA kernel implementation itself is NOT part of your task and is assumed to exist.
-
+# Constraints
+                                     
 You must:
-
 1. Load a CUDA extension using torch.utils.cpp_extension.load
 2. Call this CUDA function inside the model's forward method
 3. Preserve the original model's input/output semantics
 4. Class name must be "ModelNew"
 5. The exposed CUDA function name is: $cuda_function_name
 6. The sources name is included as $kernel_dir, please do NOT change it
-7. The generated class must have methods with the same names as those in the given task class and must not include any extra ones.
-
-IMPORTANT:
-The CUDA extension name MUST be derived from the CONTENT HASH of the file at $kernel_dir.
-You must read the file, compute a hash (e.g. md5 or sha1), and use this hash as part of the name
-passed to torch.utils.cpp_extension.load, so that changing kernel.cu automatically triggers recompilation.
-
----
-
-# Output
+7. The CUDA extension name MUST be derived from the CONTENT HASH of the file at $kernel_dir.You must read the file, compute a hash (e.g. md5 or sha1), and use this hash as part of the namepassed to torch.utils.cpp_extension.load, so that changing kernel.cu automatically triggers recompilation.
 
 No any assumptions. Only generate the complete Python code now.
-
-NOTE: Reduce computation for CPU testing by modifying ALL variables affecting tensor sizes (global vars like N/batch_size/channels/dims AND get_init_inputs() return values). Keep tensors small (e.g., <1000 elements).
 """)
 
 REPAIR_ENTRY_CODER_TEMPLATE = Template("""
 You are a Python interface engineer responsible for generating the Python entry code
 that connects a PyTorch model to a custom CUDA extension.
-
-You do NOT write CUDA kernels.
-You do NOT optimize algorithms.
-You ONLY generate the Python-side interface code.
-
----
 
 You are given the original PyTorch model code:
 
@@ -67,65 +45,20 @@ $entry_code
 Here is some useful information for you:
                                        
 $error_report
-
----
+                                       
 You must:
 1. Load a CUDA extension using torch.utils.cpp_extension.load
 2. Call this CUDA function inside the model's forward method
 3. Preserve the original model's input/output semantics
 4. Class name must be "ModelNew"
-5. The CUDA extension name is: $cuda_module_name
-6. The exposed CUDA function name is: $cuda_function_name
-7. The sources name is included as $kernel_dir, please do NOT change it
-8. The generated class must have methods with the same names as those in the given task class and must not include any extra ones.
-                                       
+5. The exposed CUDA function name is: $cuda_function_name
+6. The sources name is included as $kernel_dir, please do NOT change it
+7. The CUDA extension name MUST be derived from the CONTENT HASH of the file at $kernel_dir.You must read the file, compute a hash (e.g. md5 or sha1), and use this hash as part of the namepassed to torch.utils.cpp_extension.load, so that changing kernel.cu automatically triggers recompilation.
+8. Reduce computation for CPU testing by modifying ALL variables affecting tensor sizes (global vars like N/batch_size/channels/dims AND get_init_inputs() return values). Keep tensors small (e.g., <1000 elements).
+                      
 # Output                               
 No any assumptions. Only generate the complete Python code now."""
 )
-
-
-# One Shot 
-INIT_CUDA_CODER_TEMPLATE = Template("""
-You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups. \n
-                               
-Your responsibility is to WRITE A SINGLE CUDA SOURCE FILE (.cu) that correctly implements a specified computation and matches a predefined Python interface contract.  Your goal is correctness and interface compatibility ONLY.\n
-
-The implementation MUST be:
-- Simple
-- Conservative
-- Easy to reason about
-- Structurally suitable for future optimization
-                                    
-Example Task: PyTorch Reference\n
-                               
-$example_source_code \n
-
-Example Output: Corresponding CUDA Kernel \n
-                               
-$example_cuda_code \n
-                               
-You are given the following task: \n
-
-$source_code \n
-                                                                              
- Implementation Guidance (IMPORTANT)
-
-- Use straightforward thread-to-data mapping
-- Prefer direct global memory access
-- Avoid shared memory, tiling, unrolling, vectorized loads, or warp-level primitives
-- Write clear loop structures and index calculations
-- The kernel structure should make it easy to introduce optimizations later
-
-Think like an experienced CUDA engineer writing a **correct baseline kernel** before optimization.
-
-- Output ONLY the contents of a single .cu file
-- Do NOT include explanations or comments outside the code
-- Do NOT include testing code
-- The code must be compilable and runnable when linked with the existing Python entry code
-- The CUDA extension name is: $cuda_module_name
-- The exposed CUDA function name is: $cuda_function_name                                         
-""")
-
 
 INIT_CUDA_CODER_TEMPLATE = Template("""
 You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups. \n
@@ -184,176 +117,118 @@ $hints \n
 - The exposed CUDA function name is: $cuda_function_name          
 """)
 
+
+REPAIR_CUDA_CODER_TEMPLATE_ = Template("""
+You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups. \n
+                               
+Your responsibility is to WRITE A SINGLE CUDA SOURCE FILE (.cu) that correctly implements a specified computation and matches a predefined Python interface contract. You are only limited by your imagination. Your goal is correctness and interface compatibility ONLY.\n
+                               
+Here are given Pytorch Task: \n
+
+$entry_code \n
+                                     
+This is the kernel you generated last time, but it failed to run. \n
+                                     
+$last_kernel_code \n
+
+There are some hints for you to fix: \n
+                                     
+$hints \n
+                                          
+# Output Requirements 
+- Output ONLY the contents of a single .cu file
+- Do NOT include explanations or comments outside the code
+- The code must be compilable and runnable when linked with the existing Python entry code
+- No testing code
+- The CUDA extension name is: $cuda_module_name
+- The exposed CUDA function name is: $cuda_function_name
+- Parameters must linked with the given Pytorch Task, entry code parameters are wrong.      
+""")
+
 INIT_CPU_CODER_TEMPLATE = Template("""
-You are a C backend implementation agent.
-
-Your role is to generate a COMPLETE, COMPILABLE C SOURCE FILE
-that implements the given computation on CPU
-and matches the Python entry interface exactly.
-
-This C file will be compiled and loaded by entry.py
-as a CPU reference backend.
-
-Correctness is the ONLY goal.
-Performance is completely irrelevant.
-
----
-
-# Inputs
-
-## PyTorch Reference Code (Semantic Definition)
+You are a CUDA C code generator.Generate a COMPLETE and COMPILABLE .cu file that implements the same computation as the given PyTorch code, and matches the Python entry interface exactly.
+The file will be compiled by NVCC but must run on CPU only.Correctness is the only goal.
+## PyTorch Code
 $source_code
 
-## Python Entry Interface (Exact ABI Contract)
+## Python Entry Interface
 $entry_code
-
----
-
-# Your Task
-
-Generate a single complete C source file (.cu)
-that implements the same computation as the PyTorch code,
-and can be called directly from entry.py.
-
-This file serves as the CPU ground-truth implementation.
-
----
-
-# Hard Constraints (MUST FOLLOW)
-
-1. The implementation MUST be purely sequential.
-   - No multithreading.
-   - No OpenMP.
-   - No SIMD.
-   - No pthreads.
-
-2. The implementation MUST be a complete C file.
-   - Includes.
-   - Function definitions.
-   - Exposed symbols.
-   - No missing parts.
-
-3. The exposed C functions MUST exactly match
-   the interface expected by entry.py.
-
-4. You MAY use standard C math libraries.
-   - math.h
-   - exp, log, sqrt, etc.
-
-5. You MUST NOT use any parallel computing libraries.
-   - No OpenMP.
-   - No BLAS.
-   - No MKL.
-   - No Eigen.
-   - No CUDA.
-
-6. All computations MUST be explicit and deterministic.
-   - Loops.
-   - Scalar operations.
-   - Explicit indexing.
-
-7. The implementation MUST produce numerically correct results
-   equivalent to PyTorch.
-
----
-
-# Output Requirements (STRICT)
-
-- Output ONLY a single complete C source file.
-- No explanations.
-- No markdown.
-- No testing code.
-- No main function unless entry.py explicitly requires it.
+# Constraints
+1. Pure sequential CPU code.
+2. Must be a complete .cu file.
+3. Exposed functions must match entry.py exactly.
+4. Only use standard C/C++ (e.g. math.h).
+5. No parallel or external libraries.
+6. Needs to accommodate both Python Entry Interface parameters and Pytorch Code Interface.
+                                   
+# Output
+- Output only the .cu source file.
+- No explanations or extra text.
+- No main function unless required.
 """)
 
 
 REPAIR_CPU_CODER_TEMPLATE = Template("""
-You are a C backend repair agent.
+You are a CUDA C repair agent.
 
-Your role is to generate a NEW COMPLETE C SOURCE FILE
+Generate a NEW COMPLETE .cu file
 that fixes the previously generated CPU backend
-while preserving its overall structure and interface.
+while preserving its structure and interface.
 
-This C file serves as a CPU reference implementation
-for a CUDA kernel and must match the Python entry interface exactly.
+The file will be compiled by NVCC but must run on CPU only.
 
-Correctness and interface compatibility are the ONLY goals.
-Performance is irrelevant.
+Correctness and interface compatibility are the only goals.
 
 ---
 
 # Inputs
 
-## Original Task Definition (PyTorch Semantics)
+## PyTorch Semantics
 $source_code
 
-## Previously Generated (Broken) CPU C Backend
+## Broken CPU Backend
 $last_cpu_code
 
-## Error Analysis and Repair Guidance
+## Repair Hints
 $hints
 
 ---
 
-# Your Task
+# Task
 
-Produce a corrected version of the CPU C backend.
-
-You MUST base your implementation on the previous version,
-and apply only the necessary structural fixes suggested by the hints.
-
-Do NOT redesign the algorithm.
-Do NOT change the interface.
-Do NOT introduce new abstractions.
-
-The goal is minimal, conservative repair.
+Produce a corrected version based on the previous code.
+Apply only the necessary fixes from the hints.
+Do NOT redesign the algorithm or change the interface.
 
 ---
 
-# Hard Constraints (MUST FOLLOW)
+# Constraints
 
-1. The output MUST be a COMPLETE C SOURCE FILE.
-   - Includes.
-   - Function definitions.
-   - Exposed symbols.
-
-2. The implementation MUST remain purely sequential.
-   - No parallelism.
-   - No OpenMP.
-   - No threads.
-   - No SIMD.
-
-3. The exposed C functions MUST exactly match
-   the Python entry interface.
-
-4. You MAY use standard C math libraries.
-   - math.h
-   - exp, log, sqrt, etc.
-
-5. You MUST NOT use any parallel or optimized libraries.
-   - No BLAS.
-   - No MKL.
-   - No Eigen.
-   - No CUDA.
-
-6. Preserve the overall structure of the previous code.
-   - Same function names.
-   - Same data layout assumptions.
-   - Same control flow where possible.
-
-7. Apply ONLY the fixes necessary to resolve the reported errors.
-   - No speculative changes.
-   - No performance-oriented changes.
-
----
-
-# Output Requirements (STRICT)
-
-- Output ONLY the contents of a single complete C source file.
-- No explanations.
-- No markdown.
-- No testing code.
-- No main function unless required by the Python entry interface.
+1. Must be a complete .cu file.
+2. Pure sequential CPU code (no CUDA APIs, no parallelism).
+3. Exposed functions must match entry.py exactly.
+4. Only use standard C/C++ (e.g. math.h).
+5. Preserve overall structure of the previous code.
+6. Apply minimal and conservative changes only.
+7. Needs to accommodate both Python Entry Interface parameters and Pytorch Code Interface.
+# Output
+- Output only the .cu source file.
+- No explanations or extra text.
+- No test code.
+- No main function unless required.
 """)
 
+RESTORE_ENTRY_CODE_TEMPLATE = Template("""
+Restore entry.py parameters to match ref.py values.
+#ref.py:
+$source_code
+#entry.py (current):
+$entry_code
+# Output
+- Only fix the parameter values (batch_size, channels, dimensions, etc.). Keep all other code unchanged. Return complete corrected entry.py.
+- Output only the .py file
+- No explanations or extra text.
+- No test code.
+- Ban to use pytorch kernels.
+""")
 

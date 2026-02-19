@@ -3,28 +3,26 @@ import torch.nn as nn
 
 class Model(nn.Module):
     """
-    Simple model that performs a convolution, applies ReLU, and adds a bias term.
+    Simple model that performs a convolution, applies Mish, and another Mish.
     """
-    def __init__(self, in_channels, out_channels, kernel_size, bias_shape):
+    def __init__(self, in_channels, out_channels, kernel_size):
         super(Model, self).__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size)
-        self.bias = nn.Parameter(torch.randn(bias_shape)) 
 
     def forward(self, x):
         x = self.conv(x)
-        x = torch.relu(x)
-        x = x + self.bias
+        x = torch.nn.functional.mish(x)
+        x = torch.nn.functional.mish(x)
         return x
 
-batch_size = 128
+batch_size   = 64  
 in_channels  = 64  
 out_channels = 128  
-height = width = 128
+height = width = 256
 kernel_size = 3
-bias_shape = (out_channels, 1, 1)
 
 def get_inputs():
     return [torch.rand(batch_size, in_channels, height, width)]
 
 def get_init_inputs():
-    return [in_channels, out_channels, kernel_size, bias_shape]
+    return [in_channels, out_channels, kernel_size]

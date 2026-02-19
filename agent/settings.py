@@ -3,7 +3,7 @@ Analyzer_settings = {
     0:{
         "server_name": "deepseek",
         "model": "deepseek-reasoner",
-        "max_tokens": 8192,
+        "max_tokens": 16384,
         "temperature": 1.0,
         "top_p": 1.0
     }
@@ -34,7 +34,7 @@ Validator_settings = {
     0:{
         "server_name": "deepseek",
         "model": "deepseek-reasoner",
-        "max_tokens": 8192,
+        "max_tokens": 16384,
         "temperature": 1.0,
         "top_p": 1.0
     }

@@ -1,5 +1,4 @@
 {
-    // 集成终端启动时先跑 VS 环境脚本
     "terminal.integrated.profiles.windows": {
         "PowerShell + VS2019": {
             "source": "PowerShell",

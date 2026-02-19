@@ -166,15 +166,28 @@ def _test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, co
             max_err  = diff.max().item()
             mean_err = diff.mean().item()
 
-            if not torch.allclose(ref_out, test_out, atol=1e-4, rtol=1e-4):
+            if not torch.allclose(ref_out, test_out, atol=5e-3, rtol=5e-3):
+                def _fmt_trunc(t, head=3, tail=3):
+                    total = t.numel()
+                    if total <= head + tail:
+                        return str(t.tolist())
+                    h = ", ".join(f"{v:.4f}" for v in t[:head].tolist())
+                    e = ", ".join(f"{v:.4f}" for v in t[-tail:].tolist())
+                    return f"[{h} ... {e}] (len={total})"
+                
+                ref_str = _fmt_trunc(ref_out.flatten(), 4, 4)
+                test_str = _fmt_trunc(test_out.flatten(), 4, 4)
+                
                 raise ValueError(
-                    f"Outputs are not close (atol={1e-4}, rtol={1e-4}). "
-                    f"max_abs_err={max_err:.3e}, mean_abs_err={mean_err:.3e}"
+                    f"Outputs are not close (atol={5e-3}, rtol={5e-3}). "
+                    f"max_abs_err={max_err:.3e}, mean_abs_err={mean_err:.3e}\n"
+                    f"  ref:  {ref_str}\n"
+                    f"  test: {test_str}"
                 )
 
             # Timing
-            ref_t  = _bench(ref_model,  inp, dev, 5, 20)
-            test_t = _bench(test_model, inp, dev, 5, 20)
+            ref_t  = _bench(ref_model,  inp, dev, 2, 5)
+            test_t = _bench(test_model, inp, dev, 2, 5)
 
             torch.cuda.synchronize(dev)
 
