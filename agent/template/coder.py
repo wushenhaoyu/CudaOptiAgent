@@ -95,35 +95,13 @@ REPAIR_CUDA_CODER_TEMPLATE = Template("""
 You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups. \n
                                
 Your responsibility is to WRITE A SINGLE CUDA SOURCE FILE (.cu) that correctly implements a specified computation and matches a predefined Python interface contract. You are only limited by your imagination. Your goal is correctness and interface compatibility ONLY.\n
-                               
-Here are correct cpu implements: \n
 
-$cpu_code \n
-                                     
-This is the kernel you generated last time, but it failed to run. \n
-                                     
-$last_kernel_code \n
-
-There are some hints for you to fix: \n
-                                     
-$hints \n
-                                          
-# Output Requirements 
-- Output ONLY the contents of a single .cu file
-- Do NOT include explanations or comments outside the code
-- The code must be compilable and runnable when linked with the existing Python entry code
-- No testing code
-- The CUDA extension name is: $cuda_module_name
-- The exposed CUDA function name is: $cuda_function_name          
-""")
-
-
-REPAIR_CUDA_CODER_TEMPLATE_ = Template("""
-You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups. \n
-                               
-Your responsibility is to WRITE A SINGLE CUDA SOURCE FILE (.cu) that correctly implements a specified computation and matches a predefined Python interface contract. You are only limited by your imagination. Your goal is correctness and interface compatibility ONLY.\n
-                               
-Here are given Pytorch Task: \n
+                                       
+PyTorch Task:\n
+                                                                 
+$source_code \n
+                                                                     
+Here are given entry code: \n
 
 $entry_code \n
                                      
@@ -141,94 +119,5 @@ $hints \n
 - The code must be compilable and runnable when linked with the existing Python entry code
 - No testing code
 - The CUDA extension name is: $cuda_module_name
-- The exposed CUDA function name is: $cuda_function_name
-- Parameters must linked with the given Pytorch Task, entry code parameters are wrong.      
+- The exposed CUDA function name is: $cuda_function_name          
 """)
-
-INIT_CPU_CODER_TEMPLATE = Template("""
-You are a CUDA C code generator.Generate a COMPLETE and COMPILABLE .cu file that implements the same computation as the given PyTorch code, and matches the Python entry interface exactly.
-The file will be compiled by NVCC but must run on CPU only.Correctness is the only goal.
-## PyTorch Code
-$source_code
-
-## Python Entry Interface
-$entry_code
-# Constraints
-1. Pure sequential CPU code.
-2. Must be a complete .cu file.
-3. Exposed functions must match entry.py exactly.
-4. Only use standard C/C++ (e.g. math.h).
-5. No parallel or external libraries.
-6. Needs to accommodate both Python Entry Interface parameters and Pytorch Code Interface.
-                                   
-# Output
-- Output only the .cu source file.
-- No explanations or extra text.
-- No main function unless required.
-""")
-
-
-REPAIR_CPU_CODER_TEMPLATE = Template("""
-You are a CUDA C repair agent.
-
-Generate a NEW COMPLETE .cu file
-that fixes the previously generated CPU backend
-while preserving its structure and interface.
-
-The file will be compiled by NVCC but must run on CPU only.
-
-Correctness and interface compatibility are the only goals.
-
----
-
-# Inputs
-
-## PyTorch Semantics
-$source_code
-
-## Broken CPU Backend
-$last_cpu_code
-
-## Repair Hints
-$hints
-
----
-
-# Task
-
-Produce a corrected version based on the previous code.
-Apply only the necessary fixes from the hints.
-Do NOT redesign the algorithm or change the interface.
-
----
-
-# Constraints
-
-1. Must be a complete .cu file.
-2. Pure sequential CPU code (no CUDA APIs, no parallelism).
-3. Exposed functions must match entry.py exactly.
-4. Only use standard C/C++ (e.g. math.h).
-5. Preserve overall structure of the previous code.
-6. Apply minimal and conservative changes only.
-7. Needs to accommodate both Python Entry Interface parameters and Pytorch Code Interface.
-# Output
-- Output only the .cu source file.
-- No explanations or extra text.
-- No test code.
-- No main function unless required.
-""")
-
-RESTORE_ENTRY_CODE_TEMPLATE = Template("""
-Restore entry.py parameters to match ref.py values.
-#ref.py:
-$source_code
-#entry.py (current):
-$entry_code
-# Output
-- Only fix the parameter values (batch_size, channels, dimensions, etc.). Keep all other code unchanged. Return complete corrected entry.py.
-- Output only the .py file
-- No explanations or extra text.
-- No test code.
-- Ban to use pytorch kernels.
-""")
-

@@ -6,7 +6,8 @@ from openai import OpenAI
 DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY")
 OPENAI_KEY   = os.getenv("OPENAI_API_KEY")
 GEMINI_KEY   = os.getenv("GEMINI_API_KEY")
-
+QWEN_KEY     = os.getenv("QWEN_API_KEY")
+MOONSHOT_API_KEY = os.getenv("MOONSHOT_API_KEY")
 class LLM:
     def __init__(self,
                  server_name: str = "deepseek",
@@ -22,6 +23,12 @@ class LLM:
         elif server_name == "gemini":
             self.client = OpenAI(api_key=GEMINI_KEY,
                                  base_url="https://generativelanguage.googleapis.com/v1beta/openai")
+        elif server_name == "qwen":
+            self.client = OpenAI(api_key=QWEN_KEY,
+                                 base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
+        elif server_name == "kimi":
+            self.client = OpenAI(api_key=MOONSHOT_API_KEY,
+                                 base_url="https://api.moonshot.cn/v1")
         else:
             raise ValueError("server_name must be openai | deepseek | gemini")
 
