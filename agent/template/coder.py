@@ -61,42 +61,79 @@ No any assumptions. Only generate the complete Python code now."""
 )
 
 INIT_CUDA_CODER_TEMPLATE = Template("""
-You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups. \n
-                               
-Your responsibility is to WRITE A SINGLE CUDA SOURCE FILE (.cu) that correctly implements a specified computation and matches a predefined Python interface contract. You are only limited by your imagination. Your goal is correctness and interface compatibility ONLY.\n
+You write custom CUDA kernels to replace the PyTorch operators 
+in the given architecture to get speedups.
 
-Example Task: PyTorch Reference\n
-                               
-$example_source_code \n
+Your responsibility is to WRITE A SINGLE CUDA SOURCE FILE (.cu) 
+that correctly implements the specified computation and matches 
+a predefined Python interface contract.
 
-Example Output: Corresponding CUDA Kernel \n
-                               
-$example_cuda_code \n
-                               
-You are given the following task: \n
+Your goal is:
+1) Correctness
+2) Interface compatibility
+3) Respect the provided fusion plan
 
-$source_code \n
-                                    
-the entry python code has alreadt provided for you, you need to adapt to the entry python code.
-                                    
-$entry_code \n
-                                          
-# Output Requirements 
+You must NOT redesign the computation graph.
+You must NOT change the fusion grouping.
+You must strictly follow the structural constraints.
+
+------------------------------------------------------------
+Example Task: PyTorch Reference
+
+$example_source_code
+
+Example Output: Corresponding CUDA Kernel
+
+$example_cuda_code
+------------------------------------------------------------
+
+You are given the following task:
+
+$source_code
+
+The entry Python code has already been provided.
+You MUST adapt to the entry interface exactly.
+
+$entry_code
+
+------------------------------------------------------------
+FUSION PLAN (STRUCTURE IS LOCKED)
+
+$fusion_plan
+
+The fusion plan defines:
+- The number of kernels that must be generated
+- The operators that must be fused
+- The required execution stages
+- Whether intermediate tensors may be materialized
+
+STRUCTURE CONSTRAINTS:
+- The number of CUDA kernels MUST match the fusion plan.
+- Fused operators MUST be implemented inside the same kernel.
+- Do NOT create intermediate global memory tensors unless explicitly allowed.
+- Do NOT split fused operators into multiple kernels.
+- The execution stage order MUST follow the plan.
+- You may optimize implementation details, but you may NOT alter fusion boundaries.
+
+If the fusion plan specifies a single fused kernel,
+you MUST produce exactly one __global__ kernel implementation.
+
+------------------------------------------------------------
+# Output Requirements
+
 - Output ONLY the contents of a single .cu file
 - Do NOT include explanations or comments outside the code
 - The code must be compilable and runnable when linked with the existing Python entry code
 - No testing code
 - The CUDA extension name is: $cuda_module_name
-- The exposed CUDA function name is: $cuda_function_name          
+- The exposed CUDA function name is: $cuda_function_name
 """)
-
 
 REPAIR_CUDA_CODER_TEMPLATE = Template("""
 You write custom CUDA kernels to replace the pytorch operators in the given architecture to get speedups. \n
                                
 Your responsibility is to WRITE A SINGLE CUDA SOURCE FILE (.cu) that correctly implements a specified computation and matches a predefined Python interface contract. You are only limited by your imagination. Your goal is correctness and interface compatibility ONLY.\n
-
-                                       
+                           
 PyTorch Task:\n
                                                                  
 $source_code \n

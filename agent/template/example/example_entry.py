@@ -30,17 +30,16 @@ class ModelNew(nn.Module):
             x, 
             self.conv.weight, 
             self.conv.bias,  
-            self.bias       
+            self.bias        
         )
         return x
     
-# Reduce tensor sizes for CPU testing
-batch_size = 2  # Reduced from 128
-in_channels = 3  # Reduced from 64
-out_channels = 4  # Reduced from 128
-height = width = 8  # Reduced from 128
+batch_size = 128
+in_channels  = 64  
+out_channels = 128  
+height = width = 128
 kernel_size = 3
-bias_shape = (out_channels, 1, 1)  # Adjusted to match reduced out_channels
+bias_shape = (out_channels, 1, 1)
 
 def get_inputs():
     return [torch.rand(batch_size, in_channels, height, width)]

@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Dict
 from agent.llm import LLM
 from agent.settings import Coder_settings
-from agent.template.coder import INIT_CPU_CODER_TEMPLATE, INIT_ENTRY_CODER_TEMPLATE, INIT_CUDA_CODER_TEMPLATE, REPAIR_CPU_CODER_TEMPLATE, REPAIR_CUDA_CODER_TEMPLATE, REPAIR_CUDA_CODER_TEMPLATE_, REPAIR_ENTRY_CODER_TEMPLATE, RESTORE_ENTRY_CODE_TEMPLATE
+from agent.template.coder import INIT_ENTRY_CODER_TEMPLATE, INIT_CUDA_CODER_TEMPLATE, REPAIR_CUDA_CODER_TEMPLATE, REPAIR_ENTRY_CODER_TEMPLATE
 from utils.utils import strip_fence, write_file, read_file
 
 

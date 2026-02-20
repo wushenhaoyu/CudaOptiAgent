@@ -73,7 +73,7 @@ def text_to_dict(text: str) -> Dict:
 def strip_fence(code: str) -> str:
     code = code.strip()
     pattern = re.compile(
-        r'^```(?:python|py|cuda|cu|c|cpp)?\n(.*?)```$',
+        r'^```(?:python|py|cuda|cu|c|cpp|json)?\n(.*?)```$',
         re.MULTILINE | re.DOTALL
     )
     match = pattern.fullmatch(code)
@@ -107,6 +107,43 @@ def write_file(file_path: str, content: str, encoding: str = "utf-8") -> bool:
         print(f"Error writing file {file_path}: {e}")
         return False
     
+def extract_json(text: str) -> dict:
+    patterns = [
+        r'```json\s*(\{.*?\})\s*```',
+        r'```\s*(\{.*?\})\s*```',
+        r'\[recommendation\]\s*(\{.*?\})\s*\[/recommendation\]',
+        r'(\{[\s\S]*?"operators"[\s\S]*?\})',
+    ]
+    
+    for pattern in patterns:
+        matches = re.findall(pattern, text, flags=re.DOTALL)
+        for match in matches:
+            try:
+                cleaned = match.strip()
+                return json.loads(cleaned)
+            except json.JSONDecodeError:
+                continue
+    try:
+        start = text.find('{')
+        if start == -1:
+            return {}
+        count = 0
+        end = start
+        for i, char in enumerate(text[start:], start=start):
+            if char == '{':
+                count += 1
+            elif char == '}':
+                count -= 1
+                if count == 0:
+                    end = i + 1
+                    break
+        
+        if count == 0:
+            return json.loads(text[start:end])
+    except (json.JSONDecodeError, ValueError):
+        pass
+    
+    return {}
 def extract_recommendation(text: str) -> dict:
     m = re.search(r'\[recommendation]\s*(\{.*?\})\s*\[/recommendation]', text, flags=re.S)
     if not m:

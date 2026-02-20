@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Dict
 from agent.llm import LLM
 from agent.settings import Validator_settings
-from agent.template.validator import INIT_CPU_ERROR_VALIDATOR_TEMPLATE, INIT_CUDA_ERROR_VALIDATOR_TEMPLATE, INIT_CUDA_ERROR_VALIDATOR_TEMPLATE_
+from agent.template.validator import INIT_CUDA_ERROR_VALIDATOR_TEMPLATE
 from utils.utils import extract_error_report, write_file
 
 

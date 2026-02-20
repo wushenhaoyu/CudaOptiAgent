@@ -1,28 +1,43 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 class Model(nn.Module):
-    """
-    Simple model that performs a convolution, applies Mish, and another Mish.
-    """
-    def __init__(self, in_channels, out_channels, kernel_size):
+    def __init__(self, input_size, layer_sizes, output_size):
+        """
+        :param input_size: The number of input features
+        :param layer_sizes: A list of ints containing the sizes of each hidden layer
+        :param output_size: The number of output features
+        """
         super(Model, self).__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size)
-
+        
+        layers = []
+        current_input_size = input_size
+        
+        for layer_size in layer_sizes:
+            layers.append(nn.Linear(current_input_size, layer_size))
+            layers.append(nn.ReLU())
+            current_input_size = layer_size
+        
+        layers.append(nn.Linear(current_input_size, output_size))
+        
+        self.network = nn.Sequential(*layers)
+    
     def forward(self, x):
-        x = self.conv(x)
-        x = torch.nn.functional.mish(x)
-        x = torch.nn.functional.mish(x)
-        return x
+        """
+        :param x: The input tensor, shape (batch_size, input_size)
+        :return: The output tensor, shape (batch_size, output_size)
+        """
+        return self.network(x)
 
-batch_size   = 64  
-in_channels  = 64  
-out_channels = 128  
-height = width = 256
-kernel_size = 3
+# Test code
+batch_size = 128
+input_size = 16384
+layer_sizes = [16384, 16384]
+output_size = 8192
 
 def get_inputs():
-    return [torch.rand(batch_size, in_channels, height, width)]
+    return [torch.rand(batch_size, input_size)]
 
 def get_init_inputs():
-    return [in_channels, out_channels, kernel_size]
+    return [input_size, layer_sizes, output_size]

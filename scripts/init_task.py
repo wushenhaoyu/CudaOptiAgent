@@ -72,11 +72,3 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                     )
             if error_report['ERROR_FILE'] == "entry.py":
                 coder.repair_entry_code(task_root, read_file(task), task_name_no_num, task_name_no_num, str(task_root / "spec" / "kernel.cu"), read_file(task_root / "spec" / "entry.py"), error_report)
-            else:
-                coder.repair_init_cuda_code(current_dir,
-                                            read_file(str(task_root / "spec" / "ref.py")),
-                                            read_file(str(task_root / "spec" / "entry.py")),
-                                            read_file(str(task_root / "spec" / "kernel.cu")),
-                                            task_name_no_num, 
-                                            task_name_no_num, 
-                                            str(error_report))

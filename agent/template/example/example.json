@@ -1,0 +1,32 @@
+{
+  "operators": [
+    {
+      "name": "conv2d",
+      "type": "nn.Conv2d",
+      "category": "complex_out_fusable"
+    },
+    {
+      "name": "relu",
+      "type": "torch.relu",
+      "category": "injective"
+    },
+    {
+      "name": "bias_add",
+      "type": "elementwise_add_with_broadcast",
+      "category": "injective"
+    }
+  ],
+  "fusion_groups": [
+    {
+      "group_id": 1,
+      "operators": ["conv2d", "relu", "bias_add"],
+      "fusion_type": "complex_output_fusion",
+      "rules_used": [
+        "injective operators can fuse to complex_out_fusable output",
+        "multiple injective operators can fuse together"
+      ],
+      "justification": "relu and bias_add are injective and applied to conv2d output"
+    }
+  ],
+  "fusion_boundaries": []
+}
