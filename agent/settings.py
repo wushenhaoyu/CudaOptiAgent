@@ -11,7 +11,7 @@ Analyzer_settings = {
         "server_name": "qwen",
         "model": "qwen3.5-plus-2026-02-15",
         "max_tokens": 16384,
-        "temperature": 1.0,
+        "temperature": 1.2,
         "top_p": 1.0
     },
     2:{
@@ -35,7 +35,7 @@ Coder_settings = {
         "server_name": "qwen",
         "model": "qwen3.5-plus-2026-02-15",
         "max_tokens": 16384,
-        "temperature": 0.0,
+        "temperature": 0.2,
         "top_p": 1.0
     },
     2:{
@@ -60,7 +60,7 @@ Planner_settings = {
         "server_name": "qwen",
         "model": "qwen3.5-plus-2026-02-15",
         "max_tokens": 4096,
-        "temperature": 1.0,
+        "temperature": 1.2,
         "top_p": 1.0
     },
     2:{
@@ -84,7 +84,7 @@ Validator_settings = {
         "server_name": "qwen",
         "model": "qwen3.5-plus-2026-02-15",
         "max_tokens": 16384,
-        "temperature": 1.0,
+        "temperature": 1.2,
         "top_p": 1.0
     },
     2:{

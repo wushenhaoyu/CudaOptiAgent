@@ -20,7 +20,7 @@ class Analyzer(LLM):
         
         prompt = FUSE_OPERATOR_TEMPLATE.substitute(
             example_source_code=read_file("./agent/template/example/example.py"),
-            example_entry_code=read_file("./agent/template/example/example.json"),
+            example_fusion_plan=read_file("./agent/template/example/example.json"),
             source_code=source_code
         )
         while True:
@@ -28,7 +28,7 @@ class Analyzer(LLM):
             plan = extract_json(out)
             if plan is not None:
                 break
-        write_file(root_dir / "fusion_plan.json", json.dumps(plan))
+        write_file(root_dir / "spec" / "fusion_plan.json", json.dumps(plan, indent=2))
         return plan
     
         

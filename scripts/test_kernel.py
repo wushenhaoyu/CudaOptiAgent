@@ -60,6 +60,14 @@ def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, con
         torch.cuda.set_device(device_idx)
         res = _test_kernel_process(root_dir, task_dir, device_idx, conn)
         conn.send(("ok", res))
+    except AssertionError as e:
+        conn.send((
+            "err",
+            {
+                "type": "parameter_alignment_error",
+                "message": str(e),
+            }
+        ))
     except CompilationError as e:
         conn.send((
             "err",
@@ -225,6 +233,7 @@ def align_params_generic(ref_model: nn.Module, test_model: nn.Module) -> dict[st
 
     copied_same, unique_shape_copied, mapped, skipped = 0, 0, 0, 0
     aligned_test: set[str] = set()
+    missing_params: list[str] = []  # 新增：记录未对齐的参数
 
     # 1) Same name & same shape
     for name, t_dst in test_named.items():
@@ -264,6 +273,22 @@ def align_params_generic(ref_model: nn.Module, test_model: nn.Module) -> dict[st
                 break
         if not ok:
             skipped += 1
+            missing_params.append(name) 
+
+    if missing_params:
+        stats = {
+            "copied_same_shape": copied_same,
+            "unique_shape_copied": unique_shape_copied,
+            "mapped_shape": mapped,
+            "skipped": skipped,
+        }
+        raise ParameterAlignmentError(
+            message=f"Failed to align {len(missing_params)} parameters",
+            missing_params=missing_params,
+            ref_model_name=ref_model.__class__.__name__,
+            test_model_name=test_model.__class__.__name__,
+            stats=stats
+        )
 
     return {
         "copied_same_shape": copied_same,
@@ -271,6 +296,7 @@ def align_params_generic(ref_model: nn.Module, test_model: nn.Module) -> dict[st
         "mapped_shape": mapped,
         "skipped": skipped,
     }
+
 
 _PAIR_ALIGNERS: dict[tuple[str, str], callable] = {}
 
@@ -280,17 +306,53 @@ def register_pair_aligner(ref_key: str, test_key: str):
         return fn
     return deco
 
+class ParameterAlignmentError(AssertionError):
+    """
+    参数对齐失败时抛出的异常
+    """
+    def __init__(
+        self,
+        message: str,
+        missing_params: list[str],
+        ref_model_name: str,
+        test_model_name: str,
+        stats: dict
+    ):
+        super().__init__(message)
+        self.missing_params = missing_params
+        self.ref_model_name = ref_model_name
+        self.test_model_name = test_model_name
+        self.stats = stats
+    
+    def __str__(self) -> str:
+        lines = [
+            f"\n{'='*60}",
+            f"Parameter Alignment Failed",
+            f"{'='*60}",
+            f"Reference Model : {self.ref_model_name}",
+            f"Test Model      : {self.test_model_name}",
+            f"",
+            f"Missing/Unaligned Parameters ({len(self.missing_params)}):",
+        ]
+        for i, param in enumerate(self.missing_params[:20], 1):
+            lines.append(f"  {i}. {param}")
+        if len(self.missing_params) > 20:
+            lines.append(f"  ... and {len(self.missing_params) - 20} more")
+        
+        lines.extend([
+            f"",
+            f"Alignment Stats:",
+            f"  - copied_same_shape: {self.stats.get('copied_same_shape', 0)}",
+            f"  - unique_shape_copied: {self.stats.get('unique_shape_copied', 0)}",
+            f"  - mapped_shape: {self.stats.get('mapped_shape', 0)}",
+            f"  - skipped: {self.stats.get('skipped', 0)}",
+            f"{'='*60}",
+        ])
+        return "\n".join(lines)
 @torch.no_grad()
 def try_align_params(ref_model: nn.Module, test_model: nn.Module,
                      ref_mod=None, test_mod=None) -> dict[str, int]:
-    """
-    Priority:
-      0) Dispatch by exported symbols (`_export_symbol`), e.g., ("Model", "ModelNew")
-      0b) Dispatch by instance class names
-      1) Task-defined `map_ref_to_test_params` / `align_params`
-      2) Generic automatic alignment
-    """
-    # 0) Exported symbol keys (if compare_and_bench set them)
+
     key_export = (getattr(ref_model, "_export_symbol", None),
                   getattr(test_model, "_export_symbol", None))
     if key_export in _PAIR_ALIGNERS:
@@ -298,14 +360,12 @@ def try_align_params(ref_model: nn.Module, test_model: nn.Module,
         stats["pair_key"] = f"{key_export[0]}->{key_export[1]}"
         return stats
 
-    # 0b) Instance class names
     key_class = (ref_model.__class__.__name__, test_model.__class__.__name__)
     if key_class in _PAIR_ALIGNERS:
         stats = _PAIR_ALIGNERS[key_class](ref_model, test_model)
         stats["pair_key"] = f"{key_class[0]}->{key_class[1]}"
         return stats
 
-    # 1) Task-defined hooks
     for mod in (test_mod, ref_mod):
         if mod is None:
             continue
@@ -315,8 +375,6 @@ def try_align_params(ref_model: nn.Module, test_model: nn.Module,
                 fn(ref_model, test_model)
                 return {"pair_aligner": 0, "copied_same_shape": -1, "mapped_shape": -1,
                         "skipped": -1, "pair_key": "custom_fn"}
-
-    # 2) Generic path
     stats = align_params_generic(ref_model, test_model)
     stats["pair_aligner"] = 0
     stats["pair_key"] = "generic"

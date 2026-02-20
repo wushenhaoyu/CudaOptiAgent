@@ -28,9 +28,9 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
         (task_root / "spec").mkdir(parents=True, exist_ok=True) 
         (task_root / "bootstrap").mkdir(parents=True, exist_ok=True) 
         (task_root / "optimize").mkdir(parents=True, exist_ok=True) 
-        (task_root / "cpu").mkdir(parents=True, exist_ok=True) 
         shutil.copy2(task, task_root / "spec" / "ref.py")
         coder.generate_entry_code(task_root, read_file("./agent/template/example/example.py"), read_file("./agent/template/example/example_entry.py"), read_file(task), task_name_no_num, task_name_no_num, str(task_root / "spec" / "kernel.cu"))
+        analyzer.gernerate_fuse_operator_plan(task_root, read_file(task))
         bootstrap = Path(task_root / "bootstrap")
         error_report = None
                
@@ -46,6 +46,7 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                                                 read_file('./agent/template/example/example.cu'), 
                                                 read_file(task), 
                                                 read_file(task_root / "spec" / "entry.py"),
+                                                read_file(str(task_root / "spec" / "fusion_plan.json")),
                                                 task_name_no_num, 
                                                 task_name_no_num)
             else:
@@ -60,6 +61,22 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
             shutil.copy2(current_dir / "kernel.cu", task_root / "spec" / "kernel.cu")
             msg = test_kernel(task_root, current_dir, args.device)
             write_file(current_dir / "result.log", dict_to_text(msg))
+            while True:
+                if msg["runnable"] == True:
+                    break
+                if msg["message"]['type'] != "parameter_alignment_error":
+                    break
+                else:
+                    msg["advice"] = "please align ref model and test model parameters, hold the variable name same as much as possible, and make sure the model forward can run without error. You can define a function named `map_ref_to_test_params(ref_model, test_model)` in entry.py to specify the mapping if the parameters cannot be aligned by name matching."
+                    coder.repair_entry_code(task_root, 
+                                            read_file(task), 
+                                            task_name_no_num, 
+                                            task_name_no_num, 
+                                            str(task_root / "spec" / "kernel.cu"), 
+                                            read_file(task_root / "spec" / "entry.py"), 
+                                            str(msg)
+                    )
+                    msg = test_kernel(task_root, current_dir, args.device)
             if msg["runnable"] == True:
                 shutil.copy2(current_dir / "kernel.cu", bootstrap_final)
                 break

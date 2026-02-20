@@ -52,6 +52,7 @@ class Coder(LLM):
                             example_cuda_code: str, 
                             source_code: str, 
                             entry_code:str,
+                            fusion_plan: str,
                             cuda_module_name: str, 
                             cuda_function_name: str):
         prompt = INIT_CUDA_CODER_TEMPLATE.substitute(
@@ -59,6 +60,7 @@ class Coder(LLM):
             example_cuda_code = example_cuda_code,
             source_code=source_code,
             entry_code=entry_code,
+            fusion_plan=fusion_plan,
             cuda_module_name=cuda_module_name,
             cuda_function_name=cuda_function_name
         )

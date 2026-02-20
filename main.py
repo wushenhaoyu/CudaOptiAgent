@@ -8,8 +8,8 @@ from scripts.init_task import init_task
 def build_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", type=int, default=0, help="CUDA device index for benchmarking")
-    parser.add_argument("--server_name", type=str, default="moonshot")
-    parser.add_argument("--model", type=str, default="kimi-k2.5")
+    parser.add_argument("--server_name", type=str, default="qwen")
+    parser.add_argument("--model", type=str, default="qwen3.5-plus-2026-02-15")
     parser.add_argument("--model_choice", type=int, default=0)
     parser.add_argument("--task_level", type=int, default=3, choices=[0, 1, 2, 3, 4], help="task level")
     parser.add_argument("--task_id", type=int, default=0, help="task id")
