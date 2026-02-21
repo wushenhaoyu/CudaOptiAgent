@@ -111,8 +111,6 @@ def extract_json(text: str) -> dict:
     patterns = [
         r'```json\s*(\{.*?\})\s*```',
         r'```\s*(\{.*?\})\s*```',
-        r'\[recommendation\]\s*(\{.*?\})\s*\[/recommendation\]',
-        r'(\{[\s\S]*?"operators"[\s\S]*?\})',
     ]
     
     for pattern in patterns:

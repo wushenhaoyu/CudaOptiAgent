@@ -42,7 +42,7 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
         if not (task_root / "spec" / "entry.py").exists():
             coder.generate_entry_code(task_root, read_file("./agent/template/example/example.py"), read_file("./agent/template/example/example_entry.py"), read_file(task), task_name_no_num, task_name_no_num, str(task_root / "spec" / "kernel.cu"))
             
-        plan_file = task_root / "spec" / "fuse_plan.json"
+        plan_file = task_root / "spec" / "fusion_plan.json"
         if not plan_file.exists():
             analyzer.gernerate_fuse_operator_plan(task_root, read_file(task))
             

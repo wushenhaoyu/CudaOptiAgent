@@ -1,18 +1,12 @@
 import json
 from pathlib import Path
 from scripts.test_kernel import ParameterAlignmentError, _test_kernel_process, align_params_generic, try_align_params
-from utils.utils import extract_error_report
+from utils.utils import extract_error_report, extract_json
 from ref import Model, get_init_inputs, get_inputs
 from entry import ModelNew
 
-
+a = '{\n  "operators": [\n    {\n      "name": "conv",\n      "type": "Conv3d",\n      "category": "complex_out_fusable"\n    },\n    {\n      "name": "softmax",\n      "type": "softmax",\n      "category": "complex_out_fusable"\n    },\n    {\n      "name": "pool1",\n      "type": "MaxPool3d",\n      "category": "complex_out_fusable"\n    },\n    {\n      "name": "pool2",\n      "type": "MaxPool3d",\n      "category": "complex_out_fusable"\n    }\n  ],\n  "fusion_groups": [\n    {\n      "group_id": 1,\n      "kernel_name": "conv3d_kernel",\n      "operators": ["conv"],\n      "fusion_type": "single_op",\n      "rules_used": ["Complex output fusable operators can only fuse with injective operators on their output"],\n      "justification": "Conv3d is complex_out_fusable but softmax is not injective, preventing output fusion"\n    },\n    {\n      "group_id": 2,\n      "kernel_name": "softmax_kernel",\n      "operators": ["softmax"],\n      "fusion_type": "single_op",\n      "rules_used": ["Complex output fusable operators can only fuse with injective operators on their output"],\n      "justification": "Softmax is complex_out_fusable; neither previous (conv) nor next (pool1) operators are injective"\n    },\n    {\n      "group_id": 3,\n      "kernel_name": "maxpool3d_kernel",\n      "operators": ["pool1"],\n      "fusion_type": "single_op",\n      "rules_used": ["Complex output fusable operators can only fuse with injective operators on their output"],\n      "justification": "MaxPool3d is complex_out_fusable; previous operator is softmax (complex_out_fusable) and next is pool2 (complex_out_fusable)"\n    },\n    {\n      "group_id": 4,\n      "kernel_name": "maxpool3d_kernel_2",\n      "operators": ["pool2"],\n      "fusion_type": "single_op",\n      "rules_used": ["Complex output fusable operators can only fuse with injective operators on their output"],\n      "justification": "MaxPool3d is complex_out_fusable; previous operator pool1 is complex_out_fusable, not injective"\n    }\n  ],\n  "fusion_boundaries": [\n    {\n      "between": ["conv", "softmax"],\n      "reason": "softmax is complex_out_fusable, not injective; conv can only fuse injective operators applied to its output"\n    },\n    {\n      "between": ["softmax", "pool1"],\n      "reason": "Both operators are complex_out_fusable; fusion requires an injective operator to bridge complex_out_fusable operators"\n    },\n    {\n      "between": ["pool1", "pool2"],\n      "reason": "pool2 is complex_out_fusable, not injective; pool1 can only fuse injective operators applied to its output"\n    }\n  ]\n}'
 
 if __name__ == "__main__":
-    init_inputs = get_init_inputs()
-    model_ref = Model(*init_inputs)
-    model_test = ModelNew(*init_inputs)
-    #print(try_align_params(ref_model=model_ref, test_model=model_test, ref_mod=Model, test_mod=ModelNew))
-    try:
-        try_align_params(ref_model=model_ref, test_model=model_test, ref_mod=Model, test_mod=ModelNew)
-    except ParameterAlignmentError as e:
-        print(e)
+    b = extract_json(a)
+    print(b)

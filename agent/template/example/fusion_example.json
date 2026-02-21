@@ -1,0 +1,52 @@
+{
+"operators": [
+{
+"name": "conv_transpose",
+"type": "nn.ConvTranspose2d",
+"category": "complex_out_fusable"
+},
+{
+"name": "maxpool",
+"type": "nn.MaxPool2d",
+"category": "complex_out_fusable"
+},
+{
+"name": "hardtanh",
+"type": "nn.Hardtanh",
+"category": "injective"
+},
+{
+"name": "mean",
+"type": "torch.mean",
+"category": "reduction"
+},
+{
+"name": "tanh",
+"type": "torch.tanh",
+"category": "injective"
+}
+],
+"fusion_groups": [
+{
+"group_id": 1,
+"operators": ["conv_transpose", "maxpool", "hardtanh"],
+"fusion_type": "complex_output_fusion",
+"rules_used": ["complex_out_fusable operators (conv_transpose, maxpool) can fuse injective operators applied to their output (hardtanh)"],
+"justification": "hardtanh is elementwise and can be fused into the output of the maxpool, and maxpool can be fused with preceding conv_transpose as its output shape is unchanged and fusable"
+},
+{
+"group_id": 2,
+"operators": ["mean", "tanh"],
+"fusion_type": "reduction_fusion",
+"rules_used": ["A reduction operator (mean) can fuse its input injective operators (tanh applied after mean would be output injective, but here tanh follows mean - typical reduction fusion allows pointwise ops after reduction to be fused with the reduction kernel"],
+"justification": "tanh is injective and can be fused with the preceding mean reduction operator"
+}
+],
+"fusion_boundaries": [
+{
+"before": "mean",
+"reason": "mean is a reduction that changes spatial dimensions, breaking the output shape compatibility required for complex_output_fusion across it"
+}
+]
+}
+

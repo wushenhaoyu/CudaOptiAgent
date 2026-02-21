@@ -19,7 +19,7 @@ Analyzer_settings = {
         "model": "kimi-k2.5",
         "max_tokens": 16384,
         "temperature": 1.0,
-        "top_p": 1.0
+        "top_p": 0.95
     }
 }
 
@@ -43,7 +43,7 @@ Coder_settings = {
         "model": "kimi-k2.5",
         "max_tokens": 16384,
         "temperature": 0.0,
-        "top_p": 1.0
+        "top_p": 0.95
     }
 }
 
@@ -68,7 +68,7 @@ Planner_settings = {
         "model": "kimi-k2.5",
         "max_tokens": 4096,
         "temperature": 1.0,
-        "top_p": 1.0
+        "top_p": 0.95
     }
 }
 
@@ -92,7 +92,7 @@ Validator_settings = {
         "model": "kimi-k2.5",
         "max_tokens": 16384,
         "temperature": 1.0,
-        "top_p": 1.0
+        "top_p": 0.95
     }
 }
 
