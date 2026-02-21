@@ -75,7 +75,13 @@ OUTPUT FORMAT (STRICT JSON)
     }
   ]
 }
+------------------------------------------------------------
+NOW ANALYZE THE FOLLOWING MODEL:
 
+$source_code
+""")
+
+"""
 ------------------------------------------------------------
 ONE-SHOT EXAMPLE
 
@@ -86,9 +92,4 @@ $example_source_code
 EXPECTED OUTPUT:
 
 $example_fusion_plan
-
-------------------------------------------------------------
-NOW ANALYZE THE FOLLOWING MODEL:
-
-$source_code
-""")
+"""

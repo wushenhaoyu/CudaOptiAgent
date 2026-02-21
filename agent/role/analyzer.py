@@ -19,8 +19,8 @@ class Analyzer(LLM):
     def gernerate_fuse_operator_plan(self, root_dir: Path, source_code: str):
         
         prompt = FUSE_OPERATOR_TEMPLATE.substitute(
-            example_source_code=read_file("./agent/template/example/example.py"),
-            example_fusion_plan=read_file("./agent/template/example/example.json"),
+            #example_source_code=read_file("./agent/template/example/example.py"),
+            #example_fusion_plan=read_file("./agent/template/example/example.json"),
             source_code=source_code
         )
         while True:
