@@ -1,230 +1,199 @@
 #include <torch/extension.h>
 #include <cuda_runtime.h>
 #include <c10/cuda/CUDAStream.h>
-#include <vector>
 
 #define BLOCK_SIZE 256
-#define TILE_SIZE 16
 
-// Kernel for linear layer (GEMM + bias)
-template<bool apply_relu>
+// Kernel for fused linear + ReLU layers
+// Computes: output = ReLU(input @ weight^T + bias)
+__global__ void fused_linear_relu_kernel(
+    const float* __restrict__ input,
+    const float* __restrict__ weight,
+    const float* __restrict__ bias,
+    float* __restrict__ output,
+    int batch_size,
+    int input_dim,
+    int output_dim) {
+
+    int batch_idx = blockIdx.y;
+    int out_idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (batch_idx < batch_size && out_idx < output_dim) {
+        float sum = 0.0f;
+        for (int i = 0; i < input_dim; i++) {
+            float x = input[batch_idx * input_dim + i];
+            float w = weight[out_idx * input_dim + i];
+            sum += x * w;
+        }
+        sum += bias[out_idx];
+        output[batch_idx * output_dim + out_idx] = fmaxf(sum, 0.0f);
+    }
+}
+
+// Kernel for final linear layer (no ReLU)
+// Computes: output = input @ weight^T + bias
 __global__ void linear_kernel(
     const float* __restrict__ input,
     const float* __restrict__ weight,
     const float* __restrict__ bias,
     float* __restrict__ output,
-    const int batch_size,
-    const int in_features,
-    const int out_features) {
-    
-    // 2D block for tiled matrix multiplication
-    __shared__ float tile_A[TILE_SIZE][TILE_SIZE];
-    __shared__ float tile_B[TILE_SIZE][TILE_SIZE];
-    
-    const int row = blockIdx.y * TILE_SIZE + threadIdx.y;
-    const int col = blockIdx.x * TILE_SIZE + threadIdx.x;
-    
-    float sum = 0.0f;
-    
-    // Loop over tiles
-    for (int t = 0; t < (in_features + TILE_SIZE - 1) / TILE_SIZE; ++t) {
-        // Load tile from input (batch_size x in_features)
-        const int input_col = t * TILE_SIZE + threadIdx.x;
-        if (row < batch_size && input_col < in_features) {
-            tile_A[threadIdx.y][threadIdx.x] = input[row * in_features + input_col];
-        } else {
-            tile_A[threadIdx.y][threadIdx.x] = 0.0f;
+    int batch_size,
+    int input_dim,
+    int output_dim) {
+
+    int batch_idx = blockIdx.y;
+    int out_idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (batch_idx < batch_size && out_idx < output_dim) {
+        float sum = 0.0f;
+        for (int i = 0; i < input_dim; i++) {
+            float x = input[batch_idx * input_dim + i];
+            float w = weight[out_idx * input_dim + i];
+            sum += x * w;
         }
-        
-        // Load tile from weight (out_features x in_features, but transposed)
-        const int weight_row = col;
-        const int weight_col = t * TILE_SIZE + threadIdx.y;
-        if (weight_row < out_features && weight_col < in_features) {
-            tile_B[threadIdx.y][threadIdx.x] = weight[weight_row * in_features + weight_col];
-        } else {
-            tile_B[threadIdx.y][threadIdx.x] = 0.0f;
-        }
-        
-        __syncthreads();
-        
-        // Compute partial sum
-        for (int k = 0; k < TILE_SIZE; ++k) {
-            sum += tile_A[threadIdx.y][k] * tile_B[k][threadIdx.x];
-        }
-        
-        __syncthreads();
-    }
-    
-    // Write result with optional ReLU
-    if (row < batch_size && col < out_features) {
-        float result = sum + bias[col];
-        if (apply_relu) {
-            result = fmaxf(0.0f, result);
-        }
-        output[row * out_features + col] = result;
+        sum += bias[out_idx];
+        output[batch_idx * output_dim + out_idx] = sum;
     }
 }
 
-// In-place ReLU kernel
-__global__ void relu_kernel(
-    float* tensor,
-    const int num_elements) {
-    
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < num_elements) {
-        tensor[idx] = fmaxf(0.0f, tensor[idx]);
-    }
-}
-
-// Special fused kernel for linear2 + relu2 (as specified in fusion plan)
-__global__ void fused_linear2_relu2_kernel(
-    const float* __restrict__ input,
-    const float* __restrict__ weight,
-    const float* __restrict__ bias,
-    float* __restrict__ output,
-    const int batch_size,
-    const int in_features,
-    const int out_features) {
-    
-    __shared__ float tile_A[TILE_SIZE][TILE_SIZE];
-    __shared__ float tile_B[TILE_SIZE][TILE_SIZE];
-    
-    const int row = blockIdx.y * TILE_SIZE + threadIdx.y;
-    const int col = blockIdx.x * TILE_SIZE + threadIdx.x;
-    
-    float sum = 0.0f;
-    
-    // Loop over tiles
-    for (int t = 0; t < (in_features + TILE_SIZE - 1) / TILE_SIZE; ++t) {
-        // Load tile from input
-        const int input_col = t * TILE_SIZE + threadIdx.x;
-        if (row < batch_size && input_col < in_features) {
-            tile_A[threadIdx.y][threadIdx.x] = input[row * in_features + input_col];
-        } else {
-            tile_A[threadIdx.y][threadIdx.x] = 0.0f;
-        }
-        
-        // Load tile from weight
-        const int weight_row = col;
-        const int weight_col = t * TILE_SIZE + threadIdx.y;
-        if (weight_row < out_features && weight_col < in_features) {
-            tile_B[threadIdx.y][threadIdx.x] = weight[weight_row * in_features + weight_col];
-        } else {
-            tile_B[threadIdx.y][threadIdx.x] = 0.0f;
-        }
-        
-        __syncthreads();
-        
-        // Compute partial sum
-        for (int k = 0; k < TILE_SIZE; ++k) {
-            sum += tile_A[threadIdx.y][k] * tile_B[k][threadIdx.x];
-        }
-        
-        __syncthreads();
-    }
-    
-    // Write result with ReLU (fused as per fusion plan)
-    if (row < batch_size && col < out_features) {
-        float result = sum + bias[col];
-        result = fmaxf(0.0f, result);  // ReLU activation
-        output[row * out_features + col] = result;
-    }
-}
-
-torch::Tensor MLP(
+torch::Tensor DeepNarrowMLP(
     torch::Tensor input,
-    const std::vector<torch::Tensor>& weights,
-    const std::vector<torch::Tensor>& biases) {
-    
-    AT_ASSERTM(input.is_cuda(), "input must be a CUDA tensor");
-    AT_ASSERTM(input.dim() == 2, "input must be 2D");
-    AT_ASSERTM(weights.size() == biases.size(), "Number of weights and biases must match");
-    
-    const int batch_size = input.size(0);
-    const int num_layers = weights.size();
-    
-    // Validate all weights and biases are on CUDA
-    for (int i = 0; i < num_layers; ++i) {
-        AT_ASSERTM(weights[i].is_cuda(), "weights must be CUDA tensors");
-        AT_ASSERTM(biases[i].is_cuda(), "biases must be CUDA tensors");
-        AT_ASSERTM(weights[i].dim() == 2, "weights must be 2D");
-        AT_ASSERTM(biases[i].dim() == 1, "biases must be 1D");
-    }
-    
-    std::vector<torch::Tensor> activations;
-    activations.push_back(input);
-    
+    torch::Tensor weight0, torch::Tensor bias0,
+    torch::Tensor weight1, torch::Tensor bias1,
+    torch::Tensor weight2, torch::Tensor bias2,
+    torch::Tensor weight3, torch::Tensor bias3,
+    torch::Tensor weight4, torch::Tensor bias4,
+    torch::Tensor weight5, torch::Tensor bias5,
+    torch::Tensor weight6, torch::Tensor bias6,
+    torch::Tensor weight7, torch::Tensor bias7,
+    torch::Tensor weight8, torch::Tensor bias8,
+    torch::Tensor weight9, torch::Tensor bias9,
+    torch::Tensor weight10, torch::Tensor bias10,
+    torch::Tensor weight11, torch::Tensor bias11,
+    torch::Tensor weight12, torch::Tensor bias12,
+    torch::Tensor weight13, torch::Tensor bias13,
+    torch::Tensor weight14, torch::Tensor bias14,
+    torch::Tensor weight15, torch::Tensor bias15,
+    torch::Tensor weight16, torch::Tensor bias16) {
+
+    // Ensure all weights and biases are contiguous and on CUDA device
+    weight0 = weight0.contiguous();
+    bias0 = bias0.contiguous();
+    weight1 = weight1.contiguous();
+    bias1 = bias1.contiguous();
+    weight2 = weight2.contiguous();
+    bias2 = bias2.contiguous();
+    weight3 = weight3.contiguous();
+    bias3 = bias3.contiguous();
+    weight4 = weight4.contiguous();
+    bias4 = bias4.contiguous();
+    weight5 = weight5.contiguous();
+    bias5 = bias5.contiguous();
+    weight6 = weight6.contiguous();
+    bias6 = bias6.contiguous();
+    weight7 = weight7.contiguous();
+    bias7 = bias7.contiguous();
+    weight8 = weight8.contiguous();
+    bias8 = bias8.contiguous();
+    weight9 = weight9.contiguous();
+    bias9 = bias9.contiguous();
+    weight10 = weight10.contiguous();
+    bias10 = bias10.contiguous();
+    weight11 = weight11.contiguous();
+    bias11 = bias11.contiguous();
+    weight12 = weight12.contiguous();
+    bias12 = bias12.contiguous();
+    weight13 = weight13.contiguous();
+    bias13 = bias13.contiguous();
+    weight14 = weight14.contiguous();
+    bias14 = bias14.contiguous();
+    weight15 = weight15.contiguous();
+    bias15 = bias15.contiguous();
+    weight16 = weight16.contiguous();
+    bias16 = bias16.contiguous();
+
+    int batch_size = input.size(0);
+
+    int input_size = input.size(1);
+    int hidden_size = weight0.size(0);
+    int output_size = weight16.size(0);
+
+    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
+
+    torch::Tensor h0 = torch::empty({batch_size, hidden_size}, options);
+    torch::Tensor h1 = torch::empty({batch_size, hidden_size}, options);
+    torch::Tensor h2 = torch::empty({batch_size, hidden_size}, options);
+    torch::Tensor h3 = torch::empty({batch_size, hidden_size}, options);
+    torch::Tensor h4 = torch::empty({batch_size, hidden_size}, options);
+    torch::Tensor h5 = torch::empty({batch_size, hidden_size}, options);
+    torch::Tensor h6 = torch::empty({batch_size, hidden_size}, options);
+    torch::Tensor h7 = torch::empty({batch_size, hidden_size}, options);
+    torch::Tensor h8 = torch::empty({batch_size, hidden_size}, options);
+    torch::Tensor h9 = torch::empty({batch_size, hidden_size}, options);
+    torch::Tensor h10 = torch::empty({batch_size, hidden_size}, options);
+    torch::Tensor h11 = torch::empty({batch_size, hidden_size}, options);
+    torch::Tensor h12 = torch::empty({batch_size, hidden_size}, options);
+    torch::Tensor h13 = torch::empty({batch_size, hidden_size}, options);
+    torch::Tensor h14 = torch::empty({batch_size, hidden_size}, options);
+    torch::Tensor h15 = torch::empty({batch_size, hidden_size}, options);
+
+    torch::Tensor output = torch::empty({batch_size, output_size}, options);
+
     cudaStream_t stream = c10::cuda::getCurrentCUDAStream();
-    
-    // Process each layer according to fusion plan
-    for (int layer_idx = 0; layer_idx < num_layers; ++layer_idx) {
-        const int in_features = activations.back().size(1);
-        const int out_features = weights[layer_idx].size(0);
-        
-        AT_ASSERTM(weights[layer_idx].size(1) == in_features, 
-                  "Weight matrix dimensions mismatch");
-        AT_ASSERTM(biases[layer_idx].size(0) == out_features,
-                  "Bias vector dimensions mismatch");
-        
-        auto output = torch::empty({batch_size, out_features}, 
-                                  torch::dtype(torch::kFloat32).device(torch::kCUDA));
-        
-        const dim3 block(TILE_SIZE, TILE_SIZE);
-        const dim3 grid(
-            (out_features + TILE_SIZE - 1) / TILE_SIZE,
-            (batch_size + TILE_SIZE - 1) / TILE_SIZE
-        );
-        
-        // According to fusion plan: layer 2 (index 1) uses fused linear+relu
-        // Other layers use separate kernels
-        if (layer_idx == 1) {  // linear2 + relu2 (fused as per fusion plan)
-            fused_linear2_relu2_kernel<<<grid, block, 0, stream>>>(
-                activations.back().data_ptr<float>(),
-                weights[layer_idx].data_ptr<float>(),
-                biases[layer_idx].data_ptr<float>(),
-                output.data_ptr<float>(),
-                batch_size,
-                in_features,
-                out_features
-            );
-        } else if (layer_idx == num_layers - 1) {  // Last layer: linear only
-            linear_kernel<false><<<grid, block, 0, stream>>>(
-                activations.back().data_ptr<float>(),
-                weights[layer_idx].data_ptr<float>(),
-                biases[layer_idx].data_ptr<float>(),
-                output.data_ptr<float>(),
-                batch_size,
-                in_features,
-                out_features
-            );
-        } else {  // Other layers: linear + separate relu
-            linear_kernel<false><<<grid, block, 0, stream>>>(
-                activations.back().data_ptr<float>(),
-                weights[layer_idx].data_ptr<float>(),
-                biases[layer_idx].data_ptr<float>(),
-                output.data_ptr<float>(),
-                batch_size,
-                in_features,
-                out_features
-            );
-            
-            // Apply ReLU in-place (except for last layer)
-            const int num_elements = batch_size * out_features;
-            const int grid_size_relu = (num_elements + BLOCK_SIZE - 1) / BLOCK_SIZE;
-            relu_kernel<<<grid_size_relu, BLOCK_SIZE, 0, stream>>>(
-                output.data_ptr<float>(),
-                num_elements
-            );
-        }
-        
-        activations.push_back(output);
-    }
-    
+
+    dim3 block(BLOCK_SIZE, 1, 1);
+
+    auto launch_fused_linear_relu = [&](const torch::Tensor& in, const torch::Tensor& w, const torch::Tensor& b, torch::Tensor& out) {
+        int out_dim = w.size(0);
+        int in_dim = w.size(1);
+        dim3 grid((out_dim + BLOCK_SIZE - 1) / BLOCK_SIZE, batch_size, 1);
+        fused_linear_relu_kernel<<<grid, block, 0, stream>>>(
+            in.data_ptr<float>(),
+            w.data_ptr<float>(),
+            b.data_ptr<float>(),
+            out.data_ptr<float>(),
+            batch_size,
+            in_dim,
+            out_dim);
+    };
+
+    auto launch_linear = [&](const torch::Tensor& in, const torch::Tensor& w, const torch::Tensor& b, torch::Tensor& out) {
+        int out_dim = w.size(0);
+        int in_dim = w.size(1);
+        dim3 grid((out_dim + BLOCK_SIZE - 1) / BLOCK_SIZE, batch_size, 1);
+        linear_kernel<<<grid, block, 0, stream>>>(
+            in.data_ptr<float>(),
+            w.data_ptr<float>(),
+            b.data_ptr<float>(),
+            out.data_ptr<float>(),
+            batch_size,
+            in_dim,
+            out_dim);
+    };
+
+    launch_fused_linear_relu(input, weight0, bias0, h0);
+    launch_fused_linear_relu(h0, weight1, bias1, h1);
+    launch_fused_linear_relu(h1, weight2, bias2, h2);
+    launch_fused_linear_relu(h2, weight3, bias3, h3);
+    launch_fused_linear_relu(h3, weight4, bias4, h4);
+    launch_fused_linear_relu(h4, weight5, bias5, h5);
+    launch_fused_linear_relu(h5, weight6, bias6, h6);
+    launch_fused_linear_relu(h6, weight7, bias7, h7);
+    launch_fused_linear_relu(h7, weight8, bias8, h8);
+    launch_fused_linear_relu(h8, weight9, bias9, h9);
+    launch_fused_linear_relu(h9, weight10, bias10, h10);
+    launch_fused_linear_relu(h10, weight11, bias11, h11);
+    launch_fused_linear_relu(h11, weight12, bias12, h12);
+    launch_fused_linear_relu(h12, weight13, bias13, h13);
+    launch_fused_linear_relu(h13, weight14, bias14, h14);
+    launch_fused_linear_relu(h14, weight15, bias15, h15);
+    launch_linear(h15, weight16, bias16, output);
+
     C10_CUDA_KERNEL_LAUNCH_CHECK();
-    
-    return activations.back();
+
+    return output;
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("MLP", &MLP, "Multi-layer perceptron with specified fusion");
+    m.def("DeepNarrowMLP", &DeepNarrowMLP, "Deep Narrow MLP forward with fused linear+ReLU layers");
 }

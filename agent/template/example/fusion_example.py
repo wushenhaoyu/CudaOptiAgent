@@ -1,38 +1,33 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 class Model(nn.Module):
-    """
-    Model that performs a transposed convolution, followed by max pooling, hardtanh activation, mean operation, and tanh activation.
-    """
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, maxpool_kernel_size, maxpool_stride, hardtanh_min, hardtanh_max):
+    def __init__(self, input_size, layer_sizes, output_size):
         super(Model, self).__init__()
-        self.conv_transpose = nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding)
-        self.maxpool = nn.MaxPool2d(kernel_size=maxpool_kernel_size, stride=maxpool_stride)
-        self.hardtanh = nn.Hardtanh(min_val=hardtanh_min, max_val=hardtanh_max)
-
+        
+        layers = []
+        current_input_size = input_size
+        
+        for layer_size in layer_sizes:
+            layers.append(nn.Linear(current_input_size, layer_size))
+            layers.append(nn.ReLU())
+            current_input_size = layer_size
+        
+        layers.append(nn.Linear(current_input_size, output_size))
+        
+        self.network = nn.Sequential(*layers)
+    
     def forward(self, x):
-        x = self.conv_transpose(x)
-        x = self.maxpool(x)
-        x = self.hardtanh(x)
-        x = torch.mean(x, dim=(2, 3), keepdim=True)
-        x = torch.tanh(x)
-        return x
+        return self.network(x)
 
 batch_size = 128
-in_channels  = 64  
-out_channels = 64  
-height = width = 256  
-kernel_size  = 3
-stride = 1
-padding = 1
-maxpool_kernel_size = 2
-maxpool_stride = 2
-hardtanh_min = -1
-hardtanh_max = 1
+input_size = 16384
+layer_sizes = [16384, 16384]
+output_size = 8192
 
 def get_inputs():
-    return [torch.rand(batch_size, in_channels, height, width)]
+    return [torch.rand(batch_size, input_size)]
 
 def get_init_inputs():
-    return [in_channels, out_channels, kernel_size, stride, padding, maxpool_kernel_size, maxpool_stride, hardtanh_min, hardtanh_max]
+    return [input_size, layer_sizes, output_size]

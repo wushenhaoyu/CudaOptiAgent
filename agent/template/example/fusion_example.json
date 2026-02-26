@@ -1,52 +1,85 @@
 {
-"operators": [
-{
-"name": "conv_transpose",
-"type": "nn.ConvTranspose2d",
-"category": "complex_out_fusable"
-},
-{
-"name": "maxpool",
-"type": "nn.MaxPool2d",
-"category": "complex_out_fusable"
-},
-{
-"name": "hardtanh",
-"type": "nn.Hardtanh",
-"category": "injective"
-},
-{
-"name": "mean",
-"type": "torch.mean",
-"category": "reduction"
-},
-{
-"name": "tanh",
-"type": "torch.tanh",
-"category": "injective"
+  "operators": [
+    {
+      "name": "linear1",
+      "type": "linear",
+      "category": "complex_out_fusable"
+    },
+    {
+      "name": "relu1",
+      "type": "relu",
+      "category": "injective"
+    },
+    {
+      "name": "linear2",
+      "type": "linear",
+      "category": "complex_out_fusable"
+    },
+    {
+      "name": "relu2",
+      "type": "relu",
+      "category": "injective"
+    },
+    {
+      "name": "linear3",
+      "type": "linear",
+      "category": "complex_out_fusable"
+    }
+  ],
+  "fusion_groups": [
+    {
+      "group_id": 1,
+      "kernel_name": "fused_linear1_relu1",
+      "operators": [
+        "linear1",
+        "relu1"
+      ],
+      "fusion_type": "complex_output_fusion",
+      "rules_used": [
+        "complex_out_fusable rule: injective operators applied to complex_out_fusable output can be fused"
+      ],
+      "justification": "relu1 is injective and applied to linear1 output, eligible for fusion"
+    },
+    {
+      "group_id": 2,
+      "kernel_name": "fused_linear2_relu2",
+      "operators": [
+        "linear2",
+        "relu2"
+      ],
+      "fusion_type": "complex_output_fusion",
+      "rules_used": [
+        "complex_out_fusable rule: injective operators applied to complex_out_fusable output can be fused"
+      ],
+      "justification": "relu2 is injective and applied to linear2 output, eligible for fusion"
+    },
+    {
+      "group_id": 3,
+      "kernel_name": "linear3_kernel",
+      "operators": [
+        "linear3"
+      ],
+      "fusion_type": "single_op",
+      "rules_used": [
+        "SINGLE_OP: No further injective operators to fuse with linear3"
+      ],
+      "justification": "linear3 is the last op with no subsequent injective ops for fusion"
+    }
+  ],
+  "fusion_boundaries": [
+    {
+      "between": [
+        "relu1",
+        "linear2"
+      ],
+      "reason": "linear2 is a new complex_out_fusable operator which starts a new fusion group"
+    },
+    {
+      "between": [
+        "relu2",
+        "linear3"
+      ],
+      "reason": "linear3 is a complex_out_fusable operator without subsequent injective for fusion; starts new group"
+    }
+  ]
 }
-],
-"fusion_groups": [
-{
-"group_id": 1,
-"operators": ["conv_transpose", "maxpool", "hardtanh"],
-"fusion_type": "complex_output_fusion",
-"rules_used": ["complex_out_fusable operators (conv_transpose, maxpool) can fuse injective operators applied to their output (hardtanh)"],
-"justification": "hardtanh is elementwise and can be fused into the output of the maxpool, and maxpool can be fused with preceding conv_transpose as its output shape is unchanged and fusable"
-},
-{
-"group_id": 2,
-"operators": ["mean", "tanh"],
-"fusion_type": "reduction_fusion",
-"rules_used": ["A reduction operator (mean) can fuse its input injective operators (tanh applied after mean would be output injective, but here tanh follows mean - typical reduction fusion allows pointwise ops after reduction to be fused with the reduction kernel"],
-"justification": "tanh is injective and can be fused with the preceding mean reduction operator"
-}
-],
-"fusion_boundaries": [
-{
-"before": "mean",
-"reason": "mean is a reduction that changes spatial dimensions, breaking the output shape compatibility required for complex_output_fusion across it"
-}
-]
-}
-

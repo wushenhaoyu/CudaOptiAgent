@@ -1,3 +1,5 @@
+from tqdm import tqdm
+
 from pathlib import Path
 from typing import Dict
 from agent.llm import LLM
@@ -13,6 +15,7 @@ class Validator(LLM):
         super().__init__(server_name=args.server_name, model=args.model, max_tokens=16384, temperature=1.0, top_p=1.0)
 
     def generate_init_error_report(self, current_dir: Path, source_code: str, entry_code: str, kernel_code: str, error_log: str):
+        tqdm.write("generate_init_error_report")
         prompt = INIT_CUDA_ERROR_VALIDATOR_TEMPLATE.substitute(
             source_code=source_code,
             entry_code=entry_code,
