@@ -9,10 +9,8 @@ from utils.utils import extract_error_report, write_file
 
 class Validator(LLM):
     def __init__(self, args: Dict):
-        setting_id = args.model_choice
-        setting = Validator_settings[setting_id]
 
-        super().__init__(server_name=setting["server_name"], model=setting["model"], max_tokens=setting["max_tokens"], temperature=setting["temperature"], top_p=setting["top_p"])
+        super().__init__(server_name=args.server_name, model=args.model, max_tokens=16384, temperature=1.0, top_p=1.0)
 
     def generate_init_error_report(self, current_dir: Path, source_code: str, entry_code: str, kernel_code: str, error_log: str):
         prompt = INIT_CUDA_ERROR_VALIDATOR_TEMPLATE.substitute(

@@ -9,10 +9,9 @@ from utils.utils import strip_fence, write_file, read_file
 
 class Coder(LLM):
     def __init__(self, args: Dict):
-        setting_id = args.model_choice
-        setting = Coder_settings[setting_id]
 
-        super().__init__(server_name=setting["server_name"], model=setting["model"], max_tokens=setting["max_tokens"], temperature=setting["temperature"], top_p=setting["top_p"])
+
+        super().__init__(server_name=args.server_name, model=args.model, max_tokens=16384, temperature=0.0, top_p=1.0)
 
 
     def generate_entry_code(self, root_dir: Path , exmaple_source_code: str, example_entry_code: str, source_code: str, cuda_module_name: str, cuda_function_name: str, kernel_dir: str):

@@ -8,21 +8,26 @@ OPENAI_KEY   = os.getenv("OPENAI_API_KEY")
 GEMINI_KEY   = os.getenv("GEMINI_API_KEY")
 QWEN_KEY     = os.getenv("QWEN_API_KEY")
 MOONSHOT_API_KEY = os.getenv("MOONSHOT_API_KEY")
+XIAO_API_KEY = os.getenv("XIAO_API_KEY")
 class LLM:
     def __init__(self,
                  server_name: str = "deepseek",
                  model: str = "deepseek-chat",
-                 max_tokens: int = 4096,
+                 max_tokens: int = 4096,    
                  temperature: float = 0.7,
                  top_p: float = 1.0):
         if server_name == "deepseek":
-            self.client = OpenAI(api_key=DEEPSEEK_KEY,
-                                 base_url="https://api.deepseek.com")
+            self.client = OpenAI(api_key=XIAO_API_KEY,
+                                 #base_url="https://api.deepseek.com")
+                                    base_url="https://aigc.x-see.cn/v1/",timeout=1000)
         elif server_name == "openai":
-            self.client = OpenAI(api_key=OPENAI_KEY)
+            self.client = OpenAI(api_key=XIAO_API_KEY
+                                 #)
+                                 ,base_url="https://aigc.x-see.cn/v1/",timeout=1000)
         elif server_name == "gemini":
-            self.client = OpenAI(api_key=GEMINI_KEY,
-                                 base_url="https://generativelanguage.googleapis.com/v1beta/openai")
+            self.client = OpenAI(api_key=XIAO_API_KEY,
+                                 base_url="https://aigc.x-see.cn/v1/",timeout=1000)
+                                 #base_url="https://generativelanguage.googleapis.com/v1beta/openai")
         elif server_name == "qwen":
             self.client = OpenAI(api_key=QWEN_KEY,
                                  base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
