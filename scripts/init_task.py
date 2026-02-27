@@ -8,7 +8,6 @@ from agent.role.coder import Coder
 from agent.role.validator import Validator
 from agent.role.planner import Planner
 
-from scripts.test_cpu import test_cpu
 from utils.utils import dict_to_text, read_file, text_to_dict, write_file, extract_recommendation
 from scripts.test_kernel import test_kernel
 

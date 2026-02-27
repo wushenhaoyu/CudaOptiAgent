@@ -14,59 +14,78 @@ with open(kernel_path, 'rb') as f:
     content_hash = hashlib.md5(file_content).hexdigest()[:8]
 
 cuda_extension = load(
-    name=f"DeepNarrowMLP_{content_hash}",
+    name=f"ConvTranspose3d_Sum_LayerNorm_AvgPool_GELU_{content_hash}",
     sources=[kernel_path],
-    verbose=False
+    verbose=True
 )
 
 class ModelNew(nn.Module):
-    def __init__(self, input_size, hidden_layer_sizes, output_size):
-        """
-        :param input_size: The number of input features
-        :param hidden_layer_sizes: A list of ints containing the sizes of each hidden layer
-        :param output_size: The number of output features
-        """
+    """
+    Model that performs a 3D transposed convolution, followed by a sum, layer normalization, average pooling, and GELU activation.
+    """
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, output_padding, sum_weight, norm_shape, pool_kernel_size):
         super(ModelNew, self).__init__()
-        
-        layers = []
-        current_input_size = input_size
-        
-        for hidden_size in hidden_layer_sizes:
-            layers.append(nn.Linear(current_input_size, hidden_size))
-            layers.append(nn.ReLU())
-            current_input_size = hidden_size
-        
-        layers.append(nn.Linear(current_input_size, output_size))
-        
-        self.network = nn.Sequential(*layers)
-    
-    def forward(self, x):
-        """
-        :param x: The input tensor, shape (batch_size, input_size)
-        :return: The output tensor, shape (batch_size, output_size)
-        """
-        params = []
-        # Collect weights and biases from all Linear layers in order
-        for module in self.network:
-            if isinstance(module, nn.Linear):
-                # Ensure weights and biases are contiguous and on the same device as x
-                weight = module.weight.detach()
-                bias = module.bias.detach()
-                params.append(weight)
-                params.append(bias)
-        # The CUDA kernel expects: input + 16 weights + 16 biases = 33 tensors
-        # So params length must be 32 (16 weights + 16 biases)
-        # Pass input tensor first, then all params unpacked
-        return cuda_extension.DeepNarrowMLP(x, *params)
+        self.conv_transpose = nn.ConvTranspose3d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding)
+        self.sum_weight = nn.Parameter(torch.tensor(sum_weight))
+        self.norm = nn.LayerNorm(norm_shape)
+        self.avg_pool = nn.AvgPool3d(kernel_size=pool_kernel_size)
+        self.gelu = nn.GELU()
 
-# Test code
-batch_size = 1024
-input_size = 8192
-hidden_layer_sizes = [1024] * 16  # deep network with wider layers
-output_size = 8192
+    def forward(self, x):
+        # Extract parameters from conv_transpose
+        weight = self.conv_transpose.weight
+        bias = self.conv_transpose.bias
+        # sum_weight is a parameter tensor
+        sum_weight = self.sum_weight
+        # LayerNorm parameters
+        norm_weight = self.norm.weight
+        norm_bias = self.norm.bias
+        # Pool kernel size
+        pool_kernel_size = self.avg_pool.kernel_size
+
+        # Call the CUDA extension function
+        # The CUDA function signature is assumed to accept:
+        # input x,
+        # conv weight, conv bias,
+        # sum_weight,
+        # layernorm weight and bias,
+        # avgpool kernel size,
+        # and possibly stride, padding, output_padding for conv transpose
+        # Since the original forward does conv_transpose, then sum, then norm, then avgpool, then gelu,
+        # we pass all needed params to CUDA function to replicate this.
+
+        # We pass stride, padding, output_padding as tuples
+        stride = self.conv_transpose.stride
+        padding = self.conv_transpose.padding
+        output_padding = self.conv_transpose.output_padding
+
+        return cuda_extension.ConvTranspose3d_Sum_LayerNorm_AvgPool_GELU(
+            x,
+            weight,
+            bias,
+            sum_weight,
+            norm_weight,
+            norm_bias,
+            pool_kernel_size,
+            stride,
+            padding,
+            output_padding
+        )
+
+batch_size = 32
+in_channels = 32
+out_channels = 64
+depth, height, width = 16, 32, 32
+kernel_size = (3, 3, 3)
+stride = (2, 2, 2)
+padding = (1, 1, 1)
+output_padding = (1, 1, 1)
+sum_weight = 1.0
+norm_shape = (out_channels,)
+pool_kernel_size = (2, 2, 2)
 
 def get_inputs():
-    return [torch.rand(batch_size, input_size)]
+    return [torch.rand(batch_size, in_channels, depth, height, width)]
 
 def get_init_inputs():
-    return [input_size, hidden_layer_sizes, output_size]
+    return [in_channels, out_channels, kernel_size, stride, padding, output_padding, sum_weight, norm_shape, pool_kernel_size]

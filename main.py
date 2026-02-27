@@ -7,10 +7,10 @@ from scripts.init_task import init_task
 
 def build_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=int, default=7, help="CUDA device index for benchmarking")
+    parser.add_argument("--device", type=int, default=0, help="CUDA device index for benchmarking")
     parser.add_argument("--server_name", type=str, default="openai")
-    parser.add_argument("--model", type=str, default="gpt-3.5-turbo")
-    parser.add_argument("--task_level", type=int, default=3, choices=[0, 1, 2, 3, 4], help="task level")
+    parser.add_argument("--model", type=str, default="gpt-5")
+    parser.add_argument("--task_level", type=int, default=2, choices=[0, 1, 2, 3, 4], help="task level")
     parser.add_argument("--task_id", type=int, default=3, help="task id")
     parser.add_argument("--task_dir", type=str, default="./benchmark/KernelBench")
     parser.add_argument("--gpu_name", type=str, default="A800", help="GPU name for hwinfo task")
