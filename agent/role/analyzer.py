@@ -1,4 +1,5 @@
 import json
+from tqdm import tqdm
 from pathlib import Path
 from typing import Dict
 from agent.llm import LLM
@@ -14,7 +15,7 @@ class Analyzer(LLM):
         super().__init__(server_name=args.server_name, model=args.model, max_tokens=16384, temperature=1.0, top_p=1.0)
 
     def gernerate_fuse_operator_plan(self, root_dir: Path, source_code: str):
-        
+        tqdm.write("Generating fusion plan...")
         prompt = FUSE_OPERATOR_TEMPLATE.substitute(
             #example_source_code=read_file("./agent/template/example/fusion_example.py"),
             #example_fusion_plan=read_file("./agent/template/example/fusion_example.json"),

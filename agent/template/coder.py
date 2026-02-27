@@ -27,6 +27,7 @@ You must:
 6. The sources name is included as $kernel_dir, please do NOT change it
 7. The CUDA extension name MUST be derived from the CONTENT HASH of the file at $kernel_dir.You must read the file, compute a hash (e.g. md5 or sha1), and use this hash as part of the namepassed to torch.utils.cpp_extension.load, so that changing kernel.cu automatically triggers recompilation.
 8. Variable names in __init__ must MATCH source_code EXACTLY for param alignment to work
+                                     
 No any assumptions. Only generate the complete Python code now.
 """)
 
@@ -54,7 +55,8 @@ You must:
 5. The exposed CUDA function name is: $cuda_function_name
 6. The sources name is included as $kernel_dir, please do NOT change it
 7. The CUDA extension name MUST be derived from the CONTENT HASH of the file at $kernel_dir.You must read the file, compute a hash (e.g. md5 or sha1), and use this hash as part of the namepassed to torch.utils.cpp_extension.load, so that changing kernel.cu automatically triggers recompilation.
-8. Variable names in __init__ must MATCH source_code EXACTLY for param alignment to work                 
+8. Reduce computation for CPU testing by modifying ALL variables affecting tensor sizes (global vars like N/batch_size/channels/dims AND get_init_inputs() return values). Keep tensors small (e.g., <1000 elements).
+                      
 # Output                               
 No any assumptions. Only generate the complete Python code now."""
 )
@@ -96,26 +98,29 @@ You MUST adapt to the entry interface exactly.
 $entry_code
 
 ------------------------------------------------------------
-FUSION PLAN (STRUCTURE IS LOCKED)
+FUSION PLAN:
 
 $fusion_plan
 
-The fusion plan defines:
-- The number of kernels that must be generated
-- The operators that must be fused
-- The required execution stages
-- Whether intermediate tensors may be materialized
+IMPORTANT:
 
-STRUCTURE CONSTRAINTS:
-- The number of CUDA kernels MUST match the fusion plan.
-- Fused operators MUST be implemented inside the same kernel.
-- Do NOT create intermediate global memory tensors unless explicitly allowed.
-- Do NOT split fused operators into multiple kernels.
-- The execution stage order MUST follow the plan.
-- You may optimize implementation details, but you may NOT alter fusion boundaries.
+Fusion groups define logical segmentation only.
+They DO NOT strictly define the number of CUDA kernels.
 
-If the fusion plan specifies a single fused kernel,
-you MUST produce exactly one __global__ kernel implementation.
+You MAY:
+- Reuse the same CUDA kernel implementation for multiple fusion groups
+- Generate fewer kernels than fusion groups
+- Merge fusion groups into one kernel IF no boundary is violated
+- Optimize execution structure
+
+You MUST:
+- Respect all fusion boundaries
+- Preserve execution order
+- Not fuse across forbidden boundaries
+- Not introduce illegal intermediate global tensors
+
+Kernel count does NOT need to equal fusion group count.
+Correctness and boundary compliance are mandatory.
 
 ------------------------------------------------------------
 # Output Requirements

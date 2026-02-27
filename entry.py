@@ -5,8 +5,8 @@ import hashlib
 import os
 from torch.utils.cpp_extension import load
 
-# Load CUDA extension with a name derived from the content hash to force recompilation on changes
 kernel_path = "kernel.cu"
+
 if not os.path.exists(kernel_path):
     raise FileNotFoundError(f"CUDA kernel file not found at: {kernel_path}")
 
@@ -17,55 +17,57 @@ content_hash = hashlib.md5(file_bytes).hexdigest()[:8]
 cuda_extension = load(
     name=f"ConvTranspose3d_Sum_LayerNorm_AvgPool_GELU_{content_hash}",
     sources=[kernel_path],
-    verbose=False
+    verbose=True
 )
 
 class ModelNew(nn.Module):
-    """
-    Model that performs a 3D transposed convolution, followed by a sum, layer normalization,
-    average pooling, and GELU activation via a fused CUDA kernel.
-    """
-    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, output_padding, sum_weight, norm_shape, pool_kernel_size):
+    def __init__(self, input_size, layer_sizes, output_size):
+        """
+        :param input_size: The number of input features
+        :param layer_sizes: A list of ints containing the sizes of each hidden layer
+        :param output_size: The number of output features
+        """
         super(ModelNew, self).__init__()
-        # Keep modules/parameters for state, shape, and training compatibility; fused CUDA op consumes them.
-        self.conv_transpose = nn.ConvTranspose3d(
-            in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding
-        )
-        self.sum_weight = nn.Parameter(torch.tensor(sum_weight))
-        self.norm = nn.LayerNorm(norm_shape)
-        self.avg_pool = nn.AvgPool3d(kernel_size=pool_kernel_size)
-        self.gelu = nn.GELU()
-
-    def forward(self, x):
         
-        return cuda_extension.ConvTranspose3d_Sum_LayerNorm_AvgPool_GELU(
-            x,
-            self.conv_transpose.weight,
-            self.conv_transpose.bias,
-            self.conv_transpose.kernel_size,
-            self.conv_transpose.stride,
-            self.conv_transpose.padding,
-            self.conv_transpose.output_padding,
-            self.conv_transpose.groups,
-            self.sum_weight,
-            self.norm.weight,
-            self.norm.bias,
-            self.norm.eps,
-            self.avg_pool.kernel_size,
-            self.avg_pool.stride
-        )
+        # Store architecture parameters
+        self.input_size = input_size
+        self.layer_sizes = layer_sizes
+        self.output_size = output_size
+        
+        # Create linear layers for parameter storage
+        layers = []
+        current_input_size = input_size
+        
+        for layer_size in layer_sizes:
+            layers.append(nn.Linear(current_input_size, layer_size))
+            current_input_size = layer_size
+        
+        layers.append(nn.Linear(current_input_size, output_size))
+        
+        self.linear_layers = nn.ModuleList(layers)
+    
+    def forward(self, x):
+        """
+        :param x: The input tensor, shape (batch_size, input_size)
+        :return: The output tensor, shape (batch_size, output_size)
+        """
+        # Ensure all weights and biases are on the same device as input
+        device = x.device
+        weights = []
+        biases = []
+        
+        for layer in self.linear_layers:
+            weights.append(layer.weight.to(device))
+            biases.append(layer.bias.to(device))
+        
+        # Call the CUDA kernel
+        return cuda_extension.MLP(x, weights, biases)
 
-batch_size = 32
-in_channels = 32
-out_channels = 64
-depth, height, width = 16, 32, 32
-kernel_size = (3, 3, 3)
-stride = (2, 2, 2)
-padding = (1, 1, 1)
-output_padding = (1, 1, 1)
-sum_weight = 1.0
-norm_shape = (out_channels,)
-pool_kernel_size = (2, 2, 2)
+# Test code
+batch_size = 4
+input_size = 32
+layer_sizes = [32, 32]
+output_size = 16
 
 def get_inputs():
     return [torch.rand(batch_size, in_channels, depth, height, width)]

@@ -3,601 +3,388 @@
 #include <cuda_runtime.h>
 #include <c10/cuda/CUDAStream.h>
 #include <vector>
-#include <cmath>
+#include <math_constants.h>
 
-#define BLOCK_SIZE 256
+#define THREADS_PER_BLOCK 256
 
-__device__ __forceinline__ float gelu_exact(float x) {
-    const float sqrt_2 = 1.4142135623730951f;
-    return 0.5f * x * (1.0f + erff(x / sqrt_2));
+// Utility: GELU approximation (GeLU(x) = 0.5 * x * (1 + tanh(sqrt(2/pi)*(x + 0.044715*x^3))))
+__device__ __forceinline__ float gelu_approx(float x) {
+    const float kAlpha = 0.7978845608028654f; // sqrt(2/pi)
+    const float kBeta = 0.044715f;
+    float x3 = x * x * x;
+    float tanh_arg = kAlpha * (x + kBeta * x3);
+    float tanh_res = tanhf(tanh_arg);
+    return 0.5f * x * (1.0f + tanh_res);
 }
 
-// Kernel: compute ConvTranspose3d forward (no bias added here)
+// Kernel 1: ConvTranspose3d forward
+// Input: input [N, C_in, D_in, H_in, W_in]
+// Weight: [C_in, C_out, kD, kH, kW]
+// Bias: [C_out] or nullptr
+// Output: [N, C_out, D_out, H_out, W_out]
+// Parameters: stride, padding, output_padding (all 3D tuples)
+// We implement naive direct conv_transpose3d (backward conv) without shared memory or advanced tiling for correctness.
+// Each thread computes one output element (n, c_out, d_out, h_out, w_out).
+// We parallelize over output elements.
 __global__ void conv_transpose3d_kernel(
-    const float* __restrict__ input,    // [N, C_in, D_in, H_in, W_in]
-    const float* __restrict__ weight,   // [C_in, C_out_group, kD, kH, kW]
-    float* __restrict__ output,         // [N, C_out, D_out, H_out, W_out]
+    const float* __restrict__ input,
+    const float* __restrict__ weight,
+    const float* __restrict__ bias,
+    float* __restrict__ output,
     int N,
     int C_in,
+    int D_in,
+    int H_in,
+    int W_in,
     int C_out,
-    int C_out_group,
-    int groups,
-    int D_in, int H_in, int W_in,
-    int D_out, int H_out, int W_out,
-    int kD, int kH, int kW,
-    int stride_d, int stride_h, int stride_w,
-    int pad_d, int pad_h, int pad_w
+    int kD,
+    int kH,
+    int kW,
+    int D_out,
+    int H_out,
+    int W_out,
+    int stride_d,
+    int stride_h,
+    int stride_w,
+    int pad_d,
+    int pad_h,
+    int pad_w,
+    int out_pad_d,
+    int out_pad_h,
+    int out_pad_w
 ) {
-    long long total = (long long)N * C_out * D_out * H_out * W_out;
-    long long tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= total) return;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = N * C_out * D_out * H_out * W_out;
+    if (idx >= total) return;
 
-    long long tmp = tid;
-    int x = tmp % W_out; tmp /= W_out;
-    int y = tmp % H_out; tmp /= H_out;
-    int z = tmp % D_out; tmp /= D_out;
-    int co = tmp % C_out; tmp /= C_out;
-    int n = (int)tmp;
+    // Decode idx to n, c_out, d_out, h_out, w_out
+    int w_out = idx % W_out; idx /= W_out;
+    int h_out = idx % H_out; idx /= H_out;
+    int d_out = idx % D_out; idx /= D_out;
+    int c_out = idx % C_out; idx /= C_out;
+    int n = idx;
 
-    int group = co / C_out_group;
-    int co_group_idx = co % C_out_group;
-    int C_in_group = C_in / groups;
+    float val = 0.0f;
 
-    long long in_stride_c = (long long)D_in * H_in * W_in;
-    long long in_stride_n = (long long)C_in * in_stride_c;
+    // For conv_transpose3d, output[n, c_out, d_out, h_out, w_out] =
+    // sum_{c_in, kd, kh, kw} input[n, c_in, d_in, h_in, w_in] * weight[c_in, c_out, kd, kh, kw]
+    // where d_in = (d_out + pad_d - kd) / stride_d, similarly for h_in, w_in
+    // and d_in, h_in, w_in must be integer and in range.
 
-    long long out_stride_c = (long long)D_out * H_out * W_out;
-    long long out_stride_n = (long long)C_out * out_stride_c;
+    for (int c_in = 0; c_in < C_in; c_in++) {
+        for (int kd = 0; kd < kD; kd++) {
+            int d_in = (d_out + pad_d - kd);
+            if (d_in < 0) continue;
+            if (d_in % stride_d != 0) continue;
+            d_in /= stride_d;
+            if (d_in >= D_in) continue;
 
-    long long out_index_base = (long long)n * out_stride_n + (long long)co * out_stride_c + (long long)z * (long long)H_out * (long long)W_out + (long long)y * (long long)W_out + (long long)x;
+            for (int kh = 0; kh < kH; kh++) {
+                int h_in = (h_out + pad_h - kh);
+                if (h_in < 0) continue;
+                if (h_in % stride_h != 0) continue;
+                h_in /= stride_h;
+                if (h_in >= H_in) continue;
 
-    float acc = 0.0f;
+                for (int kw = 0; kw < kW; kw++) {
+                    int w_in = (w_out + pad_w - kw);
+                    if (w_in < 0) continue;
+                    if (w_in % stride_w != 0) continue;
+                    w_in /= stride_w;
+                    if (w_in >= W_in) continue;
 
-    for (int kd = 0; kd < kD; ++kd) {
-        int numer_d = z + pad_d - kd;
-        if (numer_d % stride_d != 0) continue;
-        int id = numer_d / stride_d;
-        if (id < 0 || id >= D_in) continue;
-
-        for (int kh = 0; kh < kH; ++kh) {
-            int numer_h = y + pad_h - kh;
-            if (numer_h % stride_h != 0) continue;
-            int ih = numer_h / stride_h;
-            if (ih < 0 || ih >= H_in) continue;
-
-            for (int kw = 0; kw < kW; ++kw) {
-                int numer_w = x + pad_w - kw;
-                if (numer_w % stride_w != 0) continue;
-                int iw = numer_w / stride_w;
-                if (iw < 0 || iw >= W_in) continue;
-
-                for (int ci_local = 0; ci_local < C_in_group; ++ci_local) {
-                    int ci = group * C_in_group + ci_local;
-
-                    long long in_index = (long long)n * in_stride_n + (long long)ci * in_stride_c + (long long)id * (long long)H_in * (long long)W_in + (long long)ih * (long long)W_in + (long long)iw;
-
-                    long long w_index = ((long long)ci * (long long)C_out_group + (long long)co_group_idx) * (long long)(kD * kH * kW)
-                                        + (long long)kd * (long long)(kH * kW)
-                                        + (long long)kh * (long long)kW
-                                        + (long long)kw;
-
-                    acc += input[in_index] * weight[w_index];
+                    float inp_val = input[((n * C_in + c_in) * D_in + d_in) * H_in * W_in + h_in * W_in + w_in];
+                    float w_val = weight[((c_in * C_out + c_out) * kD + kd) * kH * kW + kh * kW + kw];
+                    val += inp_val * w_val;
                 }
             }
         }
     }
 
-    output[out_index_base] = acc;
+    if (bias != nullptr) {
+        val += bias[c_out];
+    }
+
+    output[((n * C_out + c_out) * D_out + d_out) * H_out * W_out + h_out * W_out + w_out] = val;
 }
 
-// LayerNorm over last 1 dim: [ ..., W ]
-__global__ void add_bias_sum_layernorm_L1_kernel(
-    const float* __restrict__ x,    // [N, C, D, H, W]
-    const float* __restrict__ bias, // [C]
-    float sum_scalar,
-    const float* __restrict__ gamma, // [W]
-    const float* __restrict__ beta,  // [W]
-    float* __restrict__ y,          // [N, C, D, H, W]
-    int N, int C, int D, int H, int W,
+// Kernel 2: sum_weight add (injective)
+// sum_weight is a scalar float tensor (broadcasted to all elements of output)
+__global__ void add_sum_weight_kernel(float* __restrict__ output, float sum_weight, int total) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= total) return;
+    output[idx] += sum_weight;
+}
+
+// Kernel 3: LayerNorm forward
+// Input and output shape: [N, C, D, H, W]
+// LayerNorm over last dimension = C dimension only (norm_shape = (C,))
+// Actually LayerNorm norm_shape = (C,), so normalize over channel dim only per spatial location.
+// But PyTorch LayerNorm with norm_shape=(C,) normalizes over last dimension(s) of input shape.
+// Here input shape is 5D: (N, C, D, H, W)
+// norm_shape=(C,) means normalize over dimension 1 only? No, LayerNorm normalizes over last dims matching norm_shape.
+// So norm_shape=(C,) means normalize over dimension 1 only if input shape is (N, D, H, W, C).
+// But input is (N, C, D, H, W).
+// So we must permute or treat carefully.
+
+// According to PyTorch docs, LayerNorm normalizes over last len(norm_shape) dims.
+// Here norm_shape=(C,), so normalize over last dim of input.
+// Our input is (N, C, D, H, W), so last dim is W, not C.
+// So the LayerNorm in the original model is applied on shape (N, C, D, H, W) with norm_shape=(C,).
+// This means the input is permuted or LayerNorm is applied per spatial location over channels.
+
+// So we must normalize over channel dimension per spatial location (d,h,w) for each batch element.
+
+// So for each (n,d,h,w), compute mean and variance over c in [0,C-1].
+
+// LayerNorm formula:
+// y = (x - mean) / sqrt(var + eps) * weight + bias
+// weight and bias shape: (C,)
+// eps = 1e-5 (PyTorch default)
+
+__global__ void layernorm_channel_kernel(
+    const float* __restrict__ input,
+    const float* __restrict__ weight,
+    const float* __restrict__ bias,
+    float* __restrict__ output,
+    int N,
+    int C,
+    int D,
+    int H,
+    int W,
     float eps
 ) {
-    long long outer = (long long)N * C * D * H; // rows
-    long long tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= outer) return;
+    // Each thread processes one (n,d,h,w) location, normalizing over C channels.
 
-    long long tmp = tid;
-    int h = tmp % H; tmp /= H;
-    int d = tmp % D; tmp /= D;
-    int c = tmp % C; tmp /= C;
-    int n = (int)tmp;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = N * D * H * W;
+    if (idx >= total) return;
 
-    long long stride_W = 1;
-    long long stride_H = W;
-    long long stride_D = (long long)H * W;
-    long long stride_C = (long long)D * H * W;
-    long long stride_N = (long long)C * stride_C;
+    int w = idx % W; idx /= W;
+    int h = idx % H; idx /= H;
+    int d = idx % D; idx /= D;
+    int n = idx;
 
-    long long base = (long long)n * stride_N + (long long)c * stride_C + (long long)d * stride_D + (long long)h * stride_H;
-
-    float b = bias[c];
+    // Compute mean over C
     float mean = 0.0f;
-    for (int w = 0; w < W; ++w) {
-        float v = x[base + w * stride_W] + b + sum_scalar;
-        mean += v;
+    for (int c = 0; c < C; c++) {
+        mean += input[((n * C + c) * D + d) * H * W + h * W + w];
     }
-    mean /= (float)W;
+    mean /= C;
 
+    // Compute variance
     float var = 0.0f;
-    for (int w = 0; w < W; ++w) {
-        float v = x[base + w * stride_W] + b + sum_scalar;
-        float dlt = v - mean;
-        var += dlt * dlt;
+    for (int c = 0; c < C; c++) {
+        float val = input[((n * C + c) * D + d) * H * W + h * W + w];
+        float diff = val - mean;
+        var += diff * diff;
     }
-    var /= (float)W;
+    var /= C;
+
     float inv_std = rsqrtf(var + eps);
 
-    for (int w = 0; w < W; ++w) {
-        float v = x[base + w * stride_W] + b + sum_scalar;
-        float nrm = (v - mean) * inv_std;
-        y[base + w * stride_W] = nrm * gamma[w] + beta[w];
+    // Normalize and apply weight and bias per channel
+    for (int c = 0; c < C; c++) {
+        float val = input[((n * C + c) * D + d) * H * W + h * W + w];
+        float norm_val = (val - mean) * inv_std;
+        float wgt = weight[c];
+        float bs = bias[c];
+        output[((n * C + c) * D + d) * H * W + h * W + w] = norm_val * wgt + bs;
     }
 }
 
-// LayerNorm over last 2 dims: [ ..., H, W ]
-__global__ void add_bias_sum_layernorm_L2_kernel(
-    const float* __restrict__ x,    // [N, C, D, H, W]
-    const float* __restrict__ bias, // [C]
-    float sum_scalar,
-    const float* __restrict__ gamma, // [H, W] flattened row-major
-    const float* __restrict__ beta,  // [H, W]
-    float* __restrict__ y,          // [N, C, D, H, W]
-    int N, int C, int D, int H, int W,
-    float eps
+// Kernel 4: AvgPool3d forward
+// Input and output shapes: input [N, C, D_in, H_in, W_in], output [N, C, D_out, H_out, W_out]
+// kernel_size = (kD, kH, kW)
+// stride = kernel_size (default for AvgPool3d if stride not specified)
+// No padding for avgpool in this model
+// Each thread computes one output element
+__global__ void avgpool3d_kernel(
+    const float* __restrict__ input,
+    float* __restrict__ output,
+    int N,
+    int C,
+    int D_in,
+    int H_in,
+    int W_in,
+    int D_out,
+    int H_out,
+    int W_out,
+    int kD,
+    int kH,
+    int kW
 ) {
-    long long outer = (long long)N * C * D;
-    long long tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= outer) return;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = N * C * D_out * H_out * W_out;
+    if (idx >= total) return;
 
-    long long tmp = tid;
-    int d = tmp % D; tmp /= D;
-    int c = tmp % C; tmp /= C;
-    int n = (int)tmp;
+    int w_out = idx % W_out; idx /= W_out;
+    int h_out = idx % H_out; idx /= H_out;
+    int d_out = idx % D_out; idx /= D_out;
+    int c = idx % C; idx /= C;
+    int n = idx;
 
-    long long stride_W = 1;
-    long long stride_H = W;
-    long long stride_D = (long long)H * W;
-    long long stride_C = (long long)D * H * W;
-    long long stride_N = (long long)C * stride_C;
-
-    float b = bias[c];
-
-    long long base = (long long)n * stride_N + (long long)c * stride_C + (long long)d * stride_D;
-
-    int S = H * W;
-
-    float mean = 0.0f;
-    for (int idx = 0; idx < S; ++idx) {
-        int h = idx / W;
-        int w = idx % W;
-        long long off = base + (long long)h * stride_H + (long long)w * stride_W;
-        float v = x[off] + b + sum_scalar;
-        mean += v;
-    }
-    mean /= (float)S;
-
-    float var = 0.0f;
-    for (int idx = 0; idx < S; ++idx) {
-        int h = idx / W;
-        int w = idx % W;
-        long long off = base + (long long)h * stride_H + (long long)w * stride_W;
-        float v = x[off] + b + sum_scalar;
-        float dlt = v - mean;
-        var += dlt * dlt;
-    }
-    var /= (float)S;
-    float inv_std = rsqrtf(var + eps);
-
-    for (int idx = 0; idx < S; ++idx) {
-        int h = idx / W;
-        int w = idx % W;
-        long long off = base + (long long)h * stride_H + (long long)w * stride_W;
-        float v = x[off] + b + sum_scalar;
-        float nrm = (v - mean) * inv_std;
-        float g = gamma[idx];
-        float be = beta[idx];
-        y[off] = nrm * g + be;
-    }
-}
-
-// LayerNorm over last 3 dims: [ ..., D, H, W ]
-__global__ void add_bias_sum_layernorm_L3_kernel(
-    const float* __restrict__ x,    // [N, C, D, H, W]
-    const float* __restrict__ bias, // [C]
-    float sum_scalar,
-    const float* __restrict__ gamma, // [D, H, W] flattened
-    const float* __restrict__ beta,  // [D, H, W]
-    float* __restrict__ y,          // [N, C, D, H, W]
-    int N, int C, int D, int H, int W,
-    float eps
-) {
-    long long outer = (long long)N * C;
-    long long tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= outer) return;
-
-    int c = tid % C;
-    int n = (int)(tid / C);
-
-    long long stride_W = 1;
-    long long stride_H = W;
-    long long stride_D = (long long)H * W;
-    long long stride_C = (long long)D * H * W;
-    long long stride_N = (long long)C * stride_C;
-
-    long long base = (long long)n * stride_N + (long long)c * stride_C;
-
-    int S = D * H * W;
-    float b = bias[c];
-
-    float mean = 0.0f;
-    for (int idx = 0; idx < S; ++idx) {
-        int d = idx / (H * W);
-        int rem = idx % (H * W);
-        int h = rem / W;
-        int w = rem % W;
-        long long off = base + (long long)d * stride_D + (long long)h * stride_H + (long long)w * stride_W;
-        float v = x[off] + b + sum_scalar;
-        mean += v;
-    }
-    mean /= (float)S;
-
-    float var = 0.0f;
-    for (int idx = 0; idx < S; ++idx) {
-        int d = idx / (H * W);
-        int rem = idx % (H * W);
-        int h = rem / W;
-        int w = rem % W;
-        long long off = base + (long long)d * stride_D + (long long)h * stride_H + (long long)w * stride_W;
-        float v = x[off] + b + sum_scalar;
-        float dlt = v - mean;
-        var += dlt * dlt;
-    }
-    var /= (float)S;
-    float inv_std = rsqrtf(var + eps);
-
-    for (int idx = 0; idx < S; ++idx) {
-        int d = idx / (H * W);
-        int rem = idx % (H * W);
-        int h = rem / W;
-        int w = rem % W;
-        long long off = base + (long long)d * stride_D + (long long)h * stride_H + (long long)w * stride_W;
-        float v = x[off] + b + sum_scalar;
-        float nrm = (v - mean) * inv_std;
-        float g = gamma[idx];
-        float be = beta[idx];
-        y[off] = nrm * g + be;
-    }
-}
-
-// LayerNorm over last 4 dims: [ ..., C, D, H, W ]
-__global__ void add_bias_sum_layernorm_L4_kernel(
-    const float* __restrict__ x,    // [N, C, D, H, W]
-    const float* __restrict__ bias, // [C]
-    float sum_scalar,
-    const float* __restrict__ gamma, // [C, D, H, W] flattened
-    const float* __restrict__ beta,  // [C, D, H, W]
-    float* __restrict__ y,          // [N, C, D, H, W]
-    int N, int C, int D, int H, int W,
-    float eps
-) {
-    long long outer = (long long)N;
-    long long tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= outer) return;
-
-    int n = (int)tid;
-
-    long long stride_W = 1;
-    long long stride_H = W;
-    long long stride_D = (long long)H * W;
-    long long stride_C = (long long)D * H * W;
-    long long stride_N = (long long)C * stride_C;
-
-    long long base = (long long)n * stride_N;
-
-    int S = C * D * H * W;
-
-    float mean = 0.0f;
-    for (int idx = 0; idx < S; ++idx) {
-        int c = idx / (D * H * W);
-        int rem_cd = idx % (D * H * W);
-        int d = rem_cd / (H * W);
-        int rem_dh = rem_cd % (H * W);
-        int h = rem_dh / W;
-        int w = rem_dh % W;
-        long long off = base + (long long)c * stride_C + (long long)d * stride_D + (long long)h * stride_H + (long long)w * stride_W;
-        float v = x[off] + bias[c] + sum_scalar;
-        mean += v;
-    }
-    mean /= (float)S;
-
-    float var = 0.0f;
-    for (int idx = 0; idx < S; ++idx) {
-        int c = idx / (D * H * W);
-        int rem_cd = idx % (D * H * W);
-        int d = rem_cd / (H * W);
-        int rem_dh = rem_cd % (H * W);
-        int h = rem_dh / W;
-        int w = rem_dh % W;
-        long long off = base + (long long)c * stride_C + (long long)d * stride_D + (long long)h * stride_H + (long long)w * stride_W;
-        float v = x[off] + bias[c] + sum_scalar;
-        float dlt = v - mean;
-        var += dlt * dlt;
-    }
-    var /= (float)S;
-    float inv_std = rsqrtf(var + eps);
-
-    for (int idx = 0; idx < S; ++idx) {
-        int c = idx / (D * H * W);
-        int rem_cd = idx % (D * H * W);
-        int d = rem_cd / (H * W);
-        int rem_dh = rem_cd % (H * W);
-        int h = rem_dh / W;
-        int w = rem_dh % W;
-        long long off = base + (long long)c * stride_C + (long long)d * stride_D + (long long)h * stride_H + (long long)w * stride_W;
-        float v = x[off] + bias[c] + sum_scalar;
-        float nrm = (v - mean) * inv_std;
-        float g = gamma[idx];
-        float be = beta[idx];
-        y[off] = nrm * g + be;
-    }
-}
-
-// Kernel: AvgPool3d followed by GELU
-__global__ void avgpool3d_gelu_kernel(
-    const float* __restrict__ norm_out,  // [N, C, D, H, W]
-    float* __restrict__ output,          // [N, C, Dp, Hp, Wp]
-    int N, int C, int D, int H, int W,
-    int kD, int kH, int kW,
-    int sD, int sH, int sW,
-    int Dp, int Hp, int Wp
-) {
-    long long total = (long long)N * C * Dp * Hp * Wp;
-    long long tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid >= total) return;
-
-    long long tmp = tid;
-    int x = tmp % Wp; tmp /= Wp;
-    int y = tmp % Hp; tmp /= Hp;
-    int z = tmp % Dp; tmp /= Dp;
-    int c = tmp % C;  tmp /= C;
-    int n = (int)tmp;
-
-    long long in_stride_c = (long long)D * H * W;
-    long long in_stride_n = (long long)C * in_stride_c;
-
-    int z0 = z * sD;
-    int y0 = y * sH;
-    int x0 = x * sW;
+    int d_start = d_out * kD;
+    int h_start = h_out * kH;
+    int w_start = w_out * kW;
 
     float sum = 0.0f;
-    for (int kd = 0; kd < kD; ++kd) {
-        int iz = z0 + kd;
-        for (int kh = 0; kh < kH; ++kh) {
-            int iy = y0 + kh;
-            for (int kw = 0; kw < kW; ++kw) {
-                int ix = x0 + kw;
-                long long in_index = (long long)n * in_stride_n + (long long)c * in_stride_c + (long long)iz * (long long)H * (long long)W + (long long)iy * (long long)W + (long long)ix;
-                sum += norm_out[in_index];
+    int count = 0;
+    for (int kd = 0; kd < kD; kd++) {
+        int d_in = d_start + kd;
+        if (d_in >= D_in) continue;
+        for (int kh = 0; kh < kH; kh++) {
+            int h_in = h_start + kh;
+            if (h_in >= H_in) continue;
+            for (int kw = 0; kw < kW; kw++) {
+                int w_in = w_start + kw;
+                if (w_in >= W_in) continue;
+                float val = input[((n * C + c) * D_in + d_in) * H_in * W_in + h_in * W_in + w_in];
+                sum += val;
+                count++;
             }
         }
     }
-    float avg = sum / (float)(kD * kH * kW);
-    output[tid] = gelu_exact(avg);
+    output[idx] = sum / count;
 }
 
+// Kernel 5: GELU activation (injective)
+// Input and output shape same
+__global__ void gelu_kernel(float* __restrict__ data, int total) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= total) return;
+    data[idx] = gelu_approx(data[idx]);
+}
+
+// Main fused function exposed to Python
 torch::Tensor ConvTranspose3d_Sum_LayerNorm_AvgPool_GELU(
-    torch::Tensor input,
-    torch::Tensor weight,
-    torch::Tensor bias,
-    c10::IntArrayRef kernel_size,      // not used directly; inferred from weight
-    c10::IntArrayRef stride,
-    c10::IntArrayRef padding,
-    c10::IntArrayRef output_padding,
-    int64_t groups,
-    torch::Tensor sum_weight,
-    torch::Tensor norm_weight,
-    torch::Tensor norm_bias,
-    double norm_eps,
-    c10::IntArrayRef pool_kernel_size,
-    c10::IntArrayRef pool_stride
+    torch::Tensor input,           // [N, C_in, D_in, H_in, W_in]
+    torch::Tensor weight,          // [C_in, C_out, kD, kH, kW]
+    torch::Tensor bias,            // [C_out] or None
+    torch::Tensor sum_weight,      // scalar tensor
+    torch::Tensor norm_weight,     // [C_out]
+    torch::Tensor norm_bias,       // [C_out]
+    c10::IntArrayRef pool_kernel_size, // (kD, kH, kW)
+    c10::IntArrayRef stride,       // (stride_d, stride_h, stride_w)
+    c10::IntArrayRef padding,      // (pad_d, pad_h, pad_w)
+    c10::IntArrayRef output_padding // (out_pad_d, out_pad_h, out_pad_w)
 ) {
-    TORCH_CHECK(input.is_cuda(), "input must be CUDA tensor");
-    TORCH_CHECK(weight.is_cuda(), "weight must be CUDA tensor");
-    TORCH_CHECK(bias.is_cuda(), "bias must be CUDA tensor");
-    TORCH_CHECK(norm_weight.is_cuda(), "norm_weight must be CUDA tensor");
-    TORCH_CHECK(norm_bias.is_cuda(), "norm_bias must be CUDA tensor");
+    // Check input dims
+    TORCH_CHECK(input.dim() == 5, "Input must be 5D");
+    TORCH_CHECK(weight.dim() == 5, "Weight must be 5D");
+    TORCH_CHECK(norm_weight.dim() == 1, "norm_weight must be 1D");
+    TORCH_CHECK(norm_bias.dim() == 1, "norm_bias must be 1D");
+    TORCH_CHECK(sum_weight.numel() == 1, "sum_weight must be scalar");
 
-    TORCH_CHECK(input.dtype() == torch::kFloat32, "Only float32 is supported");
-    TORCH_CHECK(weight.dtype() == torch::kFloat32, "Only float32 weight is supported");
-    TORCH_CHECK(bias.dtype() == torch::kFloat32, "Only float32 bias is supported");
-    TORCH_CHECK(norm_weight.dtype() == torch::kFloat32, "Only float32 norm_weight is supported");
-    TORCH_CHECK(norm_bias.dtype() == torch::kFloat32, "Only float32 norm_bias is supported");
+    int N = input.size(0);
+    int C_in = input.size(1);
+    int D_in = input.size(2);
+    int H_in = input.size(3);
+    int W_in = input.size(4);
 
-    auto in = input.contiguous();
-    auto w = weight.contiguous();
-    auto b = bias.contiguous();
-    auto gamma = norm_weight.contiguous();
-    auto beta = norm_bias.contiguous();
+    int C_in_w = weight.size(0);
+    int C_out = weight.size(1);
+    int kD = weight.size(2);
+    int kH = weight.size(3);
+    int kW = weight.size(4);
 
-    int N = in.size(0);
-    int C_in = in.size(1);
-    int D_in = in.size(2);
-    int H_in = in.size(3);
-    int W_in = in.size(4);
+    TORCH_CHECK(C_in == C_in_w, "Input channels and weight channels mismatch");
+    TORCH_CHECK(norm_weight.size(0) == C_out, "norm_weight size mismatch");
+    TORCH_CHECK(norm_bias.size(0) == C_out, "norm_bias size mismatch");
 
-    int kD = w.size(2);
-    int kH = w.size(3);
-    int kW = w.size(4);
+    int stride_d = stride[0];
+    int stride_h = stride[1];
+    int stride_w = stride[2];
+    int pad_d = padding[0];
+    int pad_h = padding[1];
+    int pad_w = padding[2];
+    int out_pad_d = output_padding[0];
+    int out_pad_h = output_padding[1];
+    int out_pad_w = output_padding[2];
 
-    int sD = stride.size() >= 1 ? (int)stride[0] : 1;
-    int sH = stride.size() >= 2 ? (int)stride[1] : 1;
-    int sW = stride.size() >= 3 ? (int)stride[2] : 1;
+    // Compute output spatial dims for conv_transpose3d
+    int D_out = (D_in - 1) * stride_d - 2 * pad_d + kD + out_pad_d;
+    int H_out = (H_in - 1) * stride_h - 2 * pad_h + kH + out_pad_h;
+    int W_out = (W_in - 1) * stride_w - 2 * pad_w + kW + out_pad_w;
 
-    int pD = padding.size() >= 1 ? (int)padding[0] : 0;
-    int pH = padding.size() >= 2 ? (int)padding[1] : 0;
-    int pW = padding.size() >= 3 ? (int)padding[2] : 0;
-
-    int oD = output_padding.size() >= 1 ? (int)output_padding[0] : 0;
-    int oH = output_padding.size() >= 2 ? (int)output_padding[1] : 0;
-    int oW = output_padding.size() >= 3 ? (int)output_padding[2] : 0;
-
-    int C_out_group = w.size(1);
-    int C_out = C_out_group * (int)groups;
-
-    TORCH_CHECK(C_in % groups == 0, "C_in must be divisible by groups");
-    TORCH_CHECK(b.numel() == C_out, "ConvTranspose bias size must match out channels");
-
-    int D_out = (D_in - 1) * sD - 2 * pD + kD + oD;
-    int H_out = (H_in - 1) * sH - 2 * pH + kH + oH;
-    int W_out = (W_in - 1) * sW - 2 * pW + kW + oW;
-
-    TORCH_CHECK(gamma.dim() >= 1 && gamma.dim() <= 4, "LayerNorm normalized_shape rank must be 1..4 for 5D input");
-    TORCH_CHECK(beta.dim() == gamma.dim(), "LayerNorm weight/bias must have same rank");
-    TORCH_CHECK(beta.sizes().vec() == gamma.sizes().vec(), "LayerNorm weight/bias shapes must match");
-
-    int L = gamma.dim();
-    // Validate that gamma matches last L dims of [N, C_out, D_out, H_out, W_out]
-    std::vector<int64_t> last_dims = {C_out, D_out, H_out, W_out};
-    for (int i = 0; i < L; ++i) {
-        TORCH_CHECK(gamma.size(i) == last_dims[4 - L + i - 1 + 1], "LayerNorm normalized_shape must match the last dimensions of the input");
-        // The expression simplifies to last_dims[i + (4 - L + 1) - 1] but we keep vector simple:
-        // We'll map indices explicitly below when launching kernels.
-    }
-
-    auto options = torch::TensorOptions().dtype(torch::kFloat32).device(in.device());
-
+    // Allocate output tensor for conv_transpose3d
+    auto options = torch::TensorOptions().dtype(input.dtype()).device(input.device());
     auto conv_out = torch::empty({N, C_out, D_out, H_out, W_out}, options);
-    auto norm_out = torch::empty({N, C_out, D_out, H_out, W_out}, options);
-
-    int pkD = pool_kernel_size.size() >= 1 ? (int)pool_kernel_size[0] : 1;
-    int pkH = pool_kernel_size.size() >= 2 ? (int)pool_kernel_size[1] : 1;
-    int pkW = pool_kernel_size.size() >= 3 ? (int)pool_kernel_size[2] : 1;
-
-    int psD = pool_stride.size() >= 1 ? (int)pool_stride[0] : pkD;
-    int psH = pool_stride.size() >= 2 ? (int)pool_stride[1] : pkH;
-    int psW = pool_stride.size() >= 3 ? (int)pool_stride[2] : pkW;
-
-    int Dp = (D_out - pkD) / psD + 1;
-    int Hp = (H_out - pkH) / psH + 1;
-    int Wp = (W_out - pkW) / psW + 1;
-
-    auto output = torch::empty({N, C_out, Dp, Hp, Wp}, options);
 
     cudaStream_t stream = c10::cuda::getCurrentCUDAStream();
 
-    {
-        long long total = (long long)N * C_out * D_out * H_out * W_out;
-        dim3 block(BLOCK_SIZE);
-        dim3 grid((unsigned int)((total + BLOCK_SIZE - 1) / BLOCK_SIZE));
-        conv_transpose3d_kernel<<<grid, block, 0, stream>>>(
-            in.data_ptr<float>(),
-            w.data_ptr<float>(),
-            conv_out.data_ptr<float>(),
-            N,
-            C_in,
-            C_out,
-            C_out_group,
-            (int)groups,
-            D_in, H_in, W_in,
-            D_out, H_out, W_out,
-            kD, kH, kW,
-            sD, sH, sW,
-            pD, pH, pW
-        );
-    }
+    // Launch conv_transpose3d kernel
+    int total_conv = N * C_out * D_out * H_out * W_out;
+    int blocks_conv = (total_conv + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    conv_transpose3d_kernel<<<blocks_conv, THREADS_PER_BLOCK, 0, stream>>>(
+        input.data_ptr<float>(),
+        weight.data_ptr<float>(),
+        bias.defined() ? bias.data_ptr<float>() : nullptr,
+        conv_out.data_ptr<float>(),
+        N, C_in, D_in, H_in, W_in,
+        C_out, kD, kH, kW,
+        D_out, H_out, W_out,
+        stride_d, stride_h, stride_w,
+        pad_d, pad_h, pad_w,
+        out_pad_d, out_pad_h, out_pad_w
+    );
+
+    // Add sum_weight scalar to conv_out
+    int total_sum = total_conv;
+    int blocks_sum = (total_sum + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    add_sum_weight_kernel<<<blocks_sum, THREADS_PER_BLOCK, 0, stream>>>(
+        conv_out.data_ptr<float>(),
+        sum_weight.item<float>(),
+        total_sum
+    );
+
+    // LayerNorm over channel dim per spatial location
+    // Output tensor for layernorm
+    auto norm_out = torch::empty_like(conv_out);
+    int total_ln = N * D_out * H_out * W_out;
+    int blocks_ln = (total_ln + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    layernorm_channel_kernel<<<blocks_ln, THREADS_PER_BLOCK, 0, stream>>>(
+        conv_out.data_ptr<float>(),
+        norm_weight.data_ptr<float>(),
+        norm_bias.data_ptr<float>(),
+        norm_out.data_ptr<float>(),
+        N, C_out, D_out, H_out, W_out,
+        1e-5f
+    );
+
+    // AvgPool3d forward
+    int kD_pool = pool_kernel_size[0];
+    int kH_pool = pool_kernel_size[1];
+    int kW_pool = pool_kernel_size[2];
+
+    int D_pool_out = D_out / kD_pool;
+    int H_pool_out = H_out / kH_pool;
+    int W_pool_out = W_out / kW_pool;
+
+    auto pool_out = torch::empty({N, C_out, D_pool_out, H_pool_out, W_pool_out}, options);
+
+    int total_pool = N * C_out * D_pool_out * H_pool_out * W_pool_out;
+    int blocks_pool = (total_pool + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    avgpool3d_kernel<<<blocks_pool, THREADS_PER_BLOCK, 0, stream>>>(
+        norm_out.data_ptr<float>(),
+        pool_out.data_ptr<float>(),
+        N, C_out,
+        D_out, H_out, W_out,
+        D_pool_out, H_pool_out, W_pool_out,
+        kD_pool, kH_pool, kW_pool
+    );
+
+    // GELU activation inplace on pool_out
+    int total_gelu = total_pool;
+    int blocks_gelu = (total_gelu + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+    gelu_kernel<<<blocks_gelu, THREADS_PER_BLOCK, 0, stream>>>(
+        pool_out.data_ptr<float>(),
+        total_gelu
+    );
+
     C10_CUDA_KERNEL_LAUNCH_CHECK();
 
-    {
-        float sum_scalar = 0.0f;
-        if (sum_weight.numel() >= 1) {
-            sum_scalar = sum_weight.item<float>();
-        }
-        dim3 block(BLOCK_SIZE);
-        if (L == 1) {
-            TORCH_CHECK(gamma.size(0) == W_out, "normalized_shape mismatch for last 1 dim (W)");
-            long long outer = (long long)N * C_out * D_out * H_out;
-            dim3 grid((unsigned int)((outer + BLOCK_SIZE - 1) / BLOCK_SIZE));
-            add_bias_sum_layernorm_L1_kernel<<<grid, block, 0, stream>>>(
-                conv_out.data_ptr<float>(),
-                b.data_ptr<float>(),
-                sum_scalar,
-                gamma.data_ptr<float>(),
-                beta.data_ptr<float>(),
-                norm_out.data_ptr<float>(),
-                N, C_out, D_out, H_out, W_out,
-                (float)norm_eps
-            );
-        } else if (L == 2) {
-            TORCH_CHECK(gamma.size(0) == H_out && gamma.size(1) == W_out, "normalized_shape mismatch for last 2 dims (H, W)");
-            long long outer = (long long)N * C_out * D_out;
-            dim3 grid((unsigned int)((outer + BLOCK_SIZE - 1) / BLOCK_SIZE));
-            add_bias_sum_layernorm_L2_kernel<<<grid, block, 0, stream>>>(
-                conv_out.data_ptr<float>(),
-                b.data_ptr<float>(),
-                sum_scalar,
-                gamma.data_ptr<float>(),
-                beta.data_ptr<float>(),
-                norm_out.data_ptr<float>(),
-                N, C_out, D_out, H_out, W_out,
-                (float)norm_eps
-            );
-        } else if (L == 3) {
-            TORCH_CHECK(gamma.size(0) == D_out && gamma.size(1) == H_out && gamma.size(2) == W_out, "normalized_shape mismatch for last 3 dims (D, H, W)");
-            long long outer = (long long)N * C_out;
-            dim3 grid((unsigned int)((outer + BLOCK_SIZE - 1) / BLOCK_SIZE));
-            add_bias_sum_layernorm_L3_kernel<<<grid, block, 0, stream>>>(
-                conv_out.data_ptr<float>(),
-                b.data_ptr<float>(),
-                sum_scalar,
-                gamma.data_ptr<float>(),
-                beta.data_ptr<float>(),
-                norm_out.data_ptr<float>(),
-                N, C_out, D_out, H_out, W_out,
-                (float)norm_eps
-            );
-        } else { // L == 4
-            TORCH_CHECK(gamma.size(0) == C_out && gamma.size(1) == D_out && gamma.size(2) == H_out && gamma.size(3) == W_out, "normalized_shape mismatch for last 4 dims (C, D, H, W)");
-            long long outer = (long long)N;
-            dim3 grid((unsigned int)((outer + BLOCK_SIZE - 1) / BLOCK_SIZE));
-            add_bias_sum_layernorm_L4_kernel<<<grid, block, 0, stream>>>(
-                conv_out.data_ptr<float>(),
-                b.data_ptr<float>(),
-                sum_scalar,
-                gamma.data_ptr<float>(),
-                beta.data_ptr<float>(),
-                norm_out.data_ptr<float>(),
-                N, C_out, D_out, H_out, W_out,
-                (float)norm_eps
-            );
-        }
-    }
-    C10_CUDA_KERNEL_LAUNCH_CHECK();
-
-    {
-        long long total = (long long)N * C_out * Dp * Hp * Wp;
-        dim3 block(BLOCK_SIZE);
-        dim3 grid((unsigned int)((total + BLOCK_SIZE - 1) / BLOCK_SIZE));
-        avgpool3d_gelu_kernel<<<grid, block, 0, stream>>>(
-            norm_out.data_ptr<float>(),
-            output.data_ptr<float>(),
-            N, C_out, D_out, H_out, W_out,
-            pkD, pkH, pkW,
-            psD, psH, psW,
-            Dp, Hp, Wp
-        );
-    }
-    C10_CUDA_KERNEL_LAUNCH_CHECK();
-
-    return output;
+    return pool_out;
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {

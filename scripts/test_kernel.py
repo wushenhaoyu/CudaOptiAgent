@@ -13,6 +13,7 @@ import torch
 import torch.nn as nn
 import importlib.util 
 
+from tqdm import tqdm
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -27,6 +28,7 @@ come form https://github.com/OptimAI-Lab/CudaForge
 
 
 def test_kernel(root_dir: Path, task_dir: Path, device_idx: int = 0):
+    tqdm.write("Testing kernel...")
     ctx = get_context("spawn")
     parent_conn, child_conn = ctx.Pipe(duplex=False)
     p = ctx.Process(target=test_kernel_process, args=(root_dir, task_dir, device_idx, child_conn,))
@@ -307,9 +309,7 @@ def register_pair_aligner(ref_key: str, test_key: str):
     return deco
 
 class ParameterAlignmentError(AssertionError):
-    """
-    参数对齐失败时抛出的异常
-    """
+
     def __init__(
         self,
         message: str,

@@ -1,3 +1,5 @@
+from tqdm import tqdm
+
 from pathlib import Path
 from typing import Dict
 from agent.llm import LLM
@@ -15,7 +17,7 @@ class Coder(LLM):
 
 
     def generate_entry_code(self, root_dir: Path , exmaple_source_code: str, example_entry_code: str, source_code: str, cuda_module_name: str, cuda_function_name: str, kernel_dir: str):
-
+        tqdm.write("generate_entry_code")
         prompt = INIT_ENTRY_CODER_TEMPLATE.substitute(
             example_source_code=exmaple_source_code,
             example_entry_code=example_entry_code,
@@ -30,7 +32,7 @@ class Coder(LLM):
         write_file(root_dir / "spec" / "entry.py", entry_code)
 
     def repair_entry_code(self, root_dir: Path ,source_code: str, cuda_module_name: str, cuda_function_name: str, kernel_dir: str, entry_code: str, error_report: str):
-
+        tqdm.write("repair_entry_code")
         prompt = REPAIR_ENTRY_CODER_TEMPLATE.substitute(
             source_code=source_code,
             cuda_module_name=cuda_module_name,
@@ -63,6 +65,7 @@ class Coder(LLM):
             cuda_module_name=cuda_module_name,
             cuda_function_name=cuda_function_name
         )
+        tqdm.write("generate_init_cuda")
 
         write_file(current_dir / "coder_io.txt", f"Input Prompt:\n{prompt}\n")
 
@@ -79,6 +82,7 @@ class Coder(LLM):
                             cuda_module_name: str, 
                             cuda_function_name: str,
                             hints: str):
+        tqdm.write("repair_init_cuda")
         prompt = REPAIR_CUDA_CODER_TEMPLATE.substitute(
             source_code=source_code,
             entry_code=entry_code,
