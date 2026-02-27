@@ -1,43 +1,40 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 class Model(nn.Module):
-    def __init__(self, input_size, layer_sizes, output_size):
-        """
-        :param input_size: The number of input features
-        :param layer_sizes: A list of ints containing the sizes of each hidden layer
-        :param output_size: The number of output features
-        """
+    """
+    Model that performs a 3D transposed convolution, followed by a sum, layer normalization, average pooling, and GELU activation.
+    """
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, output_padding, sum_weight, norm_shape, pool_kernel_size):
         super(Model, self).__init__()
-        
-        layers = []
-        current_input_size = input_size
-        
-        for layer_size in layer_sizes:
-            layers.append(nn.Linear(current_input_size, layer_size))
-            layers.append(nn.ReLU())
-            current_input_size = layer_size
-        
-        layers.append(nn.Linear(current_input_size, output_size))
-        
-        self.network = nn.Sequential(*layers)
-    
-    def forward(self, x):
-        """
-        :param x: The input tensor, shape (batch_size, input_size)
-        :return: The output tensor, shape (batch_size, output_size)
-        """
-        return self.network(x)
+        self.conv_transpose = nn.ConvTranspose3d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, output_padding=output_padding)
+        self.sum_weight = nn.Parameter(torch.tensor(sum_weight))
+        self.norm = nn.LayerNorm(norm_shape)
+        self.avg_pool = nn.AvgPool3d(kernel_size=pool_kernel_size)
+        self.gelu = nn.GELU()
 
-# Test code
-batch_size = 128
-input_size = 16384
-layer_sizes = [16384, 16384]
-output_size = 8192
+    def forward(self, x):
+        x = self.conv_transpose(x)
+        x = x + self.sum_weight
+        x = self.norm(x)
+        x = self.avg_pool(x)
+        x = self.gelu(x)
+        return x
+
+batch_size = 32
+in_channels = 32
+out_channels = 64
+depth, height, width = 16, 32, 32
+kernel_size = (3, 3, 3)
+stride = (2, 2, 2)
+padding = (1, 1, 1)
+output_padding = (1, 1, 1)
+sum_weight = 1.0
+norm_shape = (out_channels,)
+pool_kernel_size = (2, 2, 2)
 
 def get_inputs():
-    return [torch.rand(batch_size, input_size)]
+    return [torch.rand(batch_size, in_channels, depth, height, width)]
 
 def get_init_inputs():
-    return [input_size, layer_sizes, output_size]
+    return [in_channels, out_channels, kernel_size, stride, padding, output_padding, sum_weight, norm_shape, pool_kernel_size]
