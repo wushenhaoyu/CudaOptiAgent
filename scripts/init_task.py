@@ -8,6 +8,7 @@ from agent.role.coder import Coder
 from agent.role.validator import Validator
 from agent.role.planner import Planner
 
+from scripts.run_ncu import profile_with_ncu
 from utils.utils import dict_to_text, read_file, text_to_dict, write_file, extract_recommendation
 from scripts.test_kernel import test_kernel
 
@@ -41,8 +42,7 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
         if not (task_root / "spec" / "entry.py").exists():
             coder.generate_entry_code(task_root, read_file("./agent/template/example/example.py"), read_file("./agent/template/example/example_entry.py"), read_file(task), task_name_no_num, task_name_no_num, str(task_root / "spec" / "kernel.cu"))
             
-        plan_file = task_root / "spec" / "fusion_plan.json"
-        plan = None
+        plan_file = task_root / "bootstrap" / "fusion_plan.json"
         plan = None
 
         if not plan_file.exists():
@@ -50,14 +50,9 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
         else:
             plan = text_to_dict(read_file(plan_file))
 
-        operators = plan["operators"]
-        fusion_groups = plan["fusion_groups"]
-        fusion_boundaries = plan["fusion_boundaries"]
-        fusion_plan = plan.pop("operators")
-
         bootstrap = Path(task_root / "bootstrap")
         error_report = None
-               
+        impl_report  = None
         bootstrap_final = task_root / "bootstrap" / "kernel.cu"
         for i in tqdm(range(args.bootstrap_iter), desc="Bootstrap Iterations"):
             msg = {}
@@ -69,7 +64,7 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                                                 read_file('./agent/template/example/example.cu'), 
                                                 read_file(task), 
                                                 read_file(task_root / "spec" / "entry.py"),
-                                                str(fusion_plan),
+                                                str(plan),
                                                 task_name_no_num, 
                                                 task_name_no_num)
             else:
@@ -83,24 +78,27 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
             shutil.copy2(current_dir / "kernel.cu", task_root / "spec" / "kernel.cu")
             msg = test_kernel(task_root, current_dir, args.device)
             write_file(current_dir / "result.log", dict_to_text(msg))
-            while True:
-                if msg["runnable"] == True:
-                    break
-                if msg["message"]['type'] != "parameter_alignment_error":
-                    break
-                else:
-                    msg["advice"] = "please align ref model and test model parameters, hold the deep learning model paramter variable name same as much as possible, and make sure the model forward can run without error. "
-                    coder.repair_entry_code(task_root, 
-                                            read_file(task), 
-                                            task_name_no_num, 
-                                            task_name_no_num, 
-                                            str(task_root / "spec" / "kernel.cu"), 
-                                            read_file(task_root / "spec" / "entry.py"), 
-                                            str(msg)
-                    )
-                    msg = test_kernel(task_root, current_dir, args.device)
+            #while True:
+            #    if msg["runnable"] == True:
+            #        break
+            #    if msg["message"]['type'] != "parameter_alignment_error":
+            #        break
+            #    else:
+            #        msg["advice"] = "please align ref model and test model parameters, hold the deep learning model paramter variable name same as much as possible, and make sure the model forward can run without error. "
+            #        coder.repair_entry_code(task_root, 
+            #                                read_file(task), 
+            #                                task_name_no_num, 
+            #                                task_name_no_num, 
+            #                                str(task_root / "spec" / "kernel.cu"), 
+            #                                read_file(task_root / "spec" / "entry.py"), 
+            #                                str(msg)
+            #        )
+            #        msg = test_kernel(task_root, current_dir, args.device)
             if msg["runnable"] == True:
                 shutil.copy2(current_dir / "kernel.cu", bootstrap_final)
+                impl_report = validator.generate_init_cuda_impl_report(current_dir, 
+                                                                       read_file(str(task_root / "spec" / "ref.py")), 
+                                                                       read_file(str(task_root / "spec" / "kernel.cu")))
                 break
             error_report = validator.generate_init_error_report(
                         current_dir,
@@ -109,5 +107,12 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                         read_file(task_root / "spec" / "kernel.cu"),
                         read_file(current_dir / "result.log")
                     )
-            if error_report['ERROR_FILE'] == "entry.py":
-                coder.repair_entry_code(task_root, read_file(task), task_name_no_num, task_name_no_num, str(task_root / "spec" / "kernel.cu"), read_file(task_root / "spec" / "entry.py"), error_report)
+            #if error_report['ERROR_FILE'] == "entry.py":
+            #    coder.repair_entry_code(task_root, read_file(task), task_name_no_num, task_name_no_num, str(task_root / "spec" / "kernel.cu"), read_file(task_root / "spec" / "entry.py"), error_report)
+
+#=========================================== Opti =====================================
+        pass
+
+        
+
+            

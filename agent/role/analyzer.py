@@ -5,7 +5,7 @@ from typing import Dict
 from agent.llm import LLM
 from agent.settings import Analyzer_settings
 from utils.utils import extract_json, extract_recommendation, strip_fence, write_file, read_file
-from agent.template.analyzer import FUSE_OPERATOR_TEMPLATE
+from agent.template.analyzer import FUSE_ANALYZER_BASE_TEMPLATE
 from agent.template.gpu_info import GPU_SPEC_INFO
 
 
@@ -16,7 +16,7 @@ class Analyzer(LLM):
 
     def gernerate_fuse_operator_plan(self, root_dir: Path, source_code: str):
         tqdm.write("Generating fusion plan...")
-        prompt = FUSE_OPERATOR_TEMPLATE.substitute(
+        prompt = FUSE_ANALYZER_BASE_TEMPLATE.substitute(
             #example_source_code=read_file("./agent/template/example/fusion_example.py"),
             #example_fusion_plan=read_file("./agent/template/example/fusion_example.json"),
             source_code=source_code
@@ -26,7 +26,7 @@ class Analyzer(LLM):
             plan = extract_json(out)
             if plan is not None:
                 break
-        write_file(root_dir / "spec" / "fusion_plan.json", json.dumps(plan, indent=2))
+        write_file(root_dir / "bootstrap" / "fusion_plan.json", json.dumps(plan, indent=2))
         return plan
     
         

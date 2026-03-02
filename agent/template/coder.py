@@ -27,7 +27,7 @@ You must:
 6. The sources name is included as $kernel_dir, please do NOT change it
 7. The CUDA extension name MUST be derived from the CONTENT HASH of the file at $kernel_dir.You must read the file, compute a hash (e.g. md5 or sha1), and use this hash as part of the namepassed to torch.utils.cpp_extension.load, so that changing kernel.cu automatically triggers recompilation.
 8. Variable names in __init__ must MATCH source_code EXACTLY for param alignment to work
-                                     
+                                   
 No any assumptions. Only generate the complete Python code now.
 """)
 
@@ -55,8 +55,7 @@ You must:
 5. The exposed CUDA function name is: $cuda_function_name
 6. The sources name is included as $kernel_dir, please do NOT change it
 7. The CUDA extension name MUST be derived from the CONTENT HASH of the file at $kernel_dir.You must read the file, compute a hash (e.g. md5 or sha1), and use this hash as part of the namepassed to torch.utils.cpp_extension.load, so that changing kernel.cu automatically triggers recompilation.
-8. Reduce computation for CPU testing by modifying ALL variables affecting tensor sizes (global vars like N/batch_size/channels/dims AND get_init_inputs() return values). Keep tensors small (e.g., <1000 elements).
-                      
+               
 # Output                               
 No any assumptions. Only generate the complete Python code now."""
 )
@@ -77,15 +76,6 @@ Your goal is:
 You must NOT redesign the computation graph.
 You must NOT change the fusion grouping.
 You must strictly follow the structural constraints.
-
-------------------------------------------------------------
-Example Task: PyTorch Reference
-
-$example_source_code
-
-Example Output: Corresponding CUDA Kernel
-
-$example_cuda_code
 ------------------------------------------------------------
 
 You are given the following task:
@@ -131,6 +121,7 @@ Correctness and boundary compliance are mandatory.
 - No testing code
 - The CUDA extension name is: $cuda_module_name
 - The exposed CUDA function name is: $cuda_function_name
+- The generated code is for inference, and its output will be STRICTLY COMPARED with the original PyTorch model's inference output.     
 """)
 
 REPAIR_CUDA_CODER_TEMPLATE = Template("""
@@ -160,5 +151,6 @@ $hints \n
 - The code must be compilable and runnable when linked with the existing Python entry code
 - No testing code
 - The CUDA extension name is: $cuda_module_name
-- The exposed CUDA function name is: $cuda_function_name          
+- The exposed CUDA function name is: $cuda_function_name    
+- The generated code is for inference, and its output will be STRICTLY COMPARED with the original PyTorch model's inference output.           
 """)
