@@ -5,7 +5,7 @@ from typing import Dict
 from agent.llm import LLM
 from agent.settings import Coder_settings
 from agent.template.coder import INIT_ENTRY_CODER_TEMPLATE, INIT_CUDA_CODER_TEMPLATE, REPAIR_CUDA_CODER_TEMPLATE, REPAIR_ENTRY_CODER_TEMPLATE
-from utils.utils import strip_fence, write_file, read_file
+from utils.utils import save_cuda_files_clean, strip_fence, write_file, read_file
 
 
 
@@ -13,17 +13,18 @@ class Coder(LLM):
     def __init__(self, args: Dict):
 
 
-        super().__init__(server_name=args.server_name, model=args.model, max_tokens=16384, temperature=0.0, top_p=1.0)
+        #super().__init__(server_name=args.server_name, model=args.model, max_tokens=16384, temperature=0.0, top_p=1.0)
+        super().__init__(server_name="openai", model="gpt-5.3-codex", max_tokens=16384, temperature=0.1, top_p=1.0)
 
-
-    def generate_entry_code(self, root_dir: Path , exmaple_source_code: str, example_entry_code: str, source_code: str, cuda_module_name: str, cuda_function_name: str, kernel_dir: str):
+    def generate_entry_code(self, root_dir: Path , fusion_plan: str, example_source_code: str, example_entry_code: str, source_code: str, cuda_module_name: str, cuda_function_name: str, kernel_dir: str):
         tqdm.write("generate_entry_code")
         prompt = INIT_ENTRY_CODER_TEMPLATE.substitute(
-            example_source_code=exmaple_source_code,
+            fusion_plan=fusion_plan,
+            example_source_code=example_source_code,
             example_entry_code=example_entry_code,
             source_code=source_code,
-            cuda_module_name=cuda_module_name,
-            cuda_function_name=cuda_function_name,
+            #cuda_module_name=cuda_module_name,
+            #cuda_function_name=cuda_function_name,
             kernel_dir=kernel_dir
         )
 
@@ -62,16 +63,22 @@ class Coder(LLM):
             source_code=source_code,
             entry_code=entry_code,
             fusion_plan=fusion_plan,
-            cuda_module_name=cuda_module_name,
-            cuda_function_name=cuda_function_name
+            #cuda_module_name=cuda_module_name,
+            #cuda_function_name=cuda_function_name
         )
         tqdm.write("generate_init_cuda")
 
         write_file(current_dir / "coder_io.txt", f"Input Prompt:\n{prompt}\n")
 
-        cuda_code = strip_fence(self.chat(prompt))
+        out = self.chat(prompt)
+
+        save_cuda_files_clean(out, str(current_dir / "kernel"))
+
         
-        write_file(current_dir / "kernel.cu", cuda_code)
+
+        #cuda_code = strip_fence(self.chat(prompt))
+        
+        #write_file(current_dir / "kernel.cu", cuda_code)
 
         
     def repair_init_cuda_code(self, 

@@ -1,97 +1,126 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
 
-# From https://github.com/karpathy/minGPT/blob/master/mingpt/model.py
+class DenseBlock(nn.Module):
+    def __init__(self, num_layers: int, num_input_features: int, growth_rate: int):
+        """
+        :param num_layers: The number of layers in the dense block
+        :param num_input_features: The number of input feature maps
+        :param growth_rate: The growth rate for the dense block (new features added per layer)
+        """
+        super(DenseBlock, self).__init__()
+        layers = []
+        for i in range(num_layers):
+            layers.append(self._make_layer(num_input_features + i * growth_rate, growth_rate))
+        self.layers = nn.ModuleList(layers)
 
-class NewGELU(nn.Module):
-    """
-    Implementation of the GELU activation function currently in Google BERT repo (identical to OpenAI GPT).
-    Reference: Gaussian Error Linear Units (GELU) paper: https://arxiv.org/abs/1606.08415
-    """
-    def __init__(self):
-        super(NewGELU, self).__init__()
-    
-    def forward(self, x):
-        return 0.5 * x * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (x + 0.044715 * torch.pow(x, 3.0))))
-
-class CausalSelfAttention(nn.Module):
-    """
-    A vanilla multi-head masked self-attention layer with a projection at the end.
-    It is possible to use torch.nn.MultiheadAttention here but I am including an
-    explicit implementation here to show that there is nothing too scary here.
-    """
-
-    def __init__(self, n_embd, n_head, attn_pdrop, resid_pdrop, max_seqlen):
-        super().__init__()
-        assert n_embd % n_head == 0
-        # key, query, value projections for all heads, but in a batch
-        self.c_attn = nn.Linear(n_embd, 3 * n_embd)
-        # output projection
-        self.c_proj = nn.Linear(n_embd, n_embd)
-        # regularization
-        self.attn_dropout = nn.Dropout(attn_pdrop)
-        self.resid_dropout = nn.Dropout(resid_pdrop)
-        # causal mask to ensure that attention is only applied to the left in the input sequence
-        self.register_buffer("bias", torch.tril(torch.ones(max_seqlen, max_seqlen))
-                                     .view(1, 1, max_seqlen, max_seqlen))
-        self.n_head = n_head
-        self.n_embd = n_embd
+    def _make_layer(self, in_features: int, growth_rate: int):
+        """
+        Creates a single layer with BatchNorm, ReLU, Conv2D, and Dropout.
+        """
+        return nn.Sequential(
+            nn.BatchNorm2d(in_features),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_features, growth_rate, kernel_size=3, padding=1, bias=False),
+            nn.Dropout(0.0)
+        )
 
     def forward(self, x):
-        B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
-
-        # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        q, k ,v  = self.c_attn(x).split(self.n_embd, dim=2)
-        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-
-        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
-        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
-        att = F.softmax(att, dim=-1)
-        att = self.attn_dropout(att)
-        y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
-        y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
-
-        # output projection
-        y = self.resid_dropout(self.c_proj(y))
-        return y
-    
-class Model(nn.Module):
-    """ an unassuming Transformer block """
-
-    def __init__(self, n_embd, n_head, attn_pdrop, resid_pdrop, max_seqlen):
-        super().__init__()
-        self.ln_1 = nn.LayerNorm(n_embd)
-        self.attn = CausalSelfAttention(n_embd, n_head, attn_pdrop, resid_pdrop, max_seqlen)
-        self.ln_2 = nn.LayerNorm(n_embd)
-        self.mlp = nn.ModuleDict(dict(
-            c_fc    = nn.Linear(n_embd, 4 * n_embd),
-            c_proj  = nn.Linear(4 * n_embd, n_embd),
-            act     = NewGELU(),
-            dropout = nn.Dropout(resid_pdrop),
-        ))
-        m = self.mlp
-        self.mlpf = lambda x: m.dropout(m.c_proj(m.act(m.c_fc(x)))) # MLP forward
-
-    def forward(self, x):
-        x = x + self.attn(self.ln_1(x))
-        x = x + self.mlpf(self.ln_2(x))
+        """
+        :param x: Input tensor of shape (batch_size, num_input_features, height, width)
+        :return: Concatenated output tensor with shape (batch_size, num_output_features, height, width)
+        """
+        features = [x]
+        for layer in self.layers:
+            new_feature = layer(x)
+            features.append(new_feature)
+            x = torch.cat(features, 1)  # Concatenate along channel axis
         return x
 
-batch_size = 128
-max_seqlen = 1024
-seq_len = 512
-n_embd = 768
-n_head = 8
-attn_pdrop = 0.0
-resid_pdrop = 0.0
+class TransitionLayer(nn.Module):
+    def __init__(self, num_input_features: int, num_output_features: int):
+        """
+        :param num_input_features: The number of input feature maps
+        :param num_output_features: The number of output feature maps
+        """
+        super(TransitionLayer, self).__init__()
+        self.transition = nn.Sequential(
+            nn.BatchNorm2d(num_input_features),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(num_input_features, num_output_features, kernel_size=1, bias=False),
+            nn.AvgPool2d(kernel_size=2, stride=2)
+        )
+
+    def forward(self, x):
+        """
+        :param x: Input tensor of shape (batch_size, num_input_features, height, width)
+        :return: Downsampled tensor with reduced number of feature maps
+        """
+        return self.transition(x)
+
+class Model(nn.Module):
+    def __init__(self, growth_rate: int = 32, num_classes: int = 1000):
+        """
+        :param growth_rate: The growth rate of the DenseNet (new features added per layer)
+        :param num_classes: The number of output classes for classification
+        """
+        super(Model, self).__init__()
+
+        # Initial convolution and pooling
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        )
+
+        # Each dense block is followed by a transition layer, except the last one
+        num_features = 64
+        block_layers = [6, 12, 24, 16]  # Corresponding layers in DenseNet121
+
+        self.dense_blocks = nn.ModuleList()
+        self.transition_layers = nn.ModuleList()
+
+        for i, num_layers in enumerate(block_layers):
+            block = DenseBlock(num_layers=num_layers, num_input_features=num_features, growth_rate=growth_rate)
+            self.dense_blocks.append(block)
+            num_features = num_features + num_layers * growth_rate
+
+            if i != len(block_layers) - 1:
+                transition = TransitionLayer(num_input_features=num_features, num_output_features=num_features // 2)
+                self.transition_layers.append(transition)
+                num_features = num_features // 2
+
+        # Final batch norm and classifier
+        self.final_bn = nn.BatchNorm2d(num_features)
+        self.classifier = nn.Linear(num_features, num_classes)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        :param x: Input tensor of shape (batch_size, 3, height, width)
+        :return: Output tensor of shape (batch_size, num_classes)
+        """
+        x = self.features(x)
+
+        for i, block in enumerate(self.dense_blocks):
+            x = block(x)
+            if i != len(self.dense_blocks) - 1:
+                x = self.transition_layers[i](x)
+
+        x = self.final_bn(x)
+        x = F.relu(x, inplace=True)
+        x = F.adaptive_avg_pool2d(x, (1, 1)).view(x.size(0), -1)
+        x = self.classifier(x)
+        return x
+
+# Testing the DenseNet121 model
+batch_size = 10
+num_classes = 10
+height, width = 224, 224  # Standard input size for DenseNet
 
 def get_inputs():
-    return [torch.rand(batch_size, seq_len, n_embd)]
+    return [torch.rand(batch_size, 3, height, width)]
 
 def get_init_inputs():
-    return [n_embd, n_head, attn_pdrop, resid_pdrop, max_seqlen]
+    return [32, num_classes]

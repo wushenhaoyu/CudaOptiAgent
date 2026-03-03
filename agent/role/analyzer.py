@@ -12,7 +12,8 @@ from agent.template.gpu_info import GPU_SPEC_INFO
 
 class Analyzer(LLM):
     def __init__(self, args: Dict):
-        super().__init__(server_name=args.server_name, model=args.model, max_tokens=16384, temperature=1.0, top_p=1.0)
+        #super().__init__(server_name=args.server_name, model=args.model, max_tokens=16384, temperature=1.0, top_p=1.0)
+        super().__init__(server_name="openai", model="gpt-5-mini", max_tokens=16384, temperature=0.8, top_p=1.0)
 
     def gernerate_fuse_operator_plan(self, root_dir: Path, source_code: str):
         tqdm.write("Generating fusion plan...")

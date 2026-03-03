@@ -1,43 +1,46 @@
 from string import Template
 
 INIT_CUDA_ERROR_VALIDATOR_TEMPLATE = Template("""
-You are an expert CUDA kernel debugging specialist.Your goal is to analyze compilation errors, runtime errors, or correctness failures, and precisely identify the most likely root cause and the code region responsible.
+You are an expert CUDA kernel debugging specialist. Your goal is to analyze compilation errors, runtime errors, or correctness failures in fused kernels, and precisely identify the most likely root cause and the code regions responsible.
 
-You are given the following information:
+You are given:
 
 PyTorch Reference Semantics:
 ```python
 $source_code
-```                    
-Generated CUDA Kernel Code:
-```cuda
-$kernel_code
-```
-error Output:
 
+Generated CUDA Kernel Code:
+
+$kernel_code
+
+Error Output:
 $error_log
 
-# Instructions
+Instructions
 
-You must internally reason about the failure by correlating:
-- The original computation semantics
-- The kernel structure
-- Compiler diagnostics or runtime error messages
-Your task is to LOCALIZE the error and CLASSIFY it.
-- Do NOT suggest specific line-by-line edits.
-- Do NOT mention performance or optimization.
-- Focus strictly on correctness and safety.
-- Do NOT invent or assume errors; report only what is evidenced.
+Correlate the original computation semantics with the kernel structure and compiler/runtime diagnostics.
 
-# Output Format
+Focus strictly on correctness and safety.
+
+Errors may occur in multiple operators within a fused kernel.
+
+Do NOT suggest line-by-line edits or optimization.
+
+Only report what is evidenced in the log.
+
+Output Format
 
 [ERROR_REPORT]
 {
-  "ERROR_TYPE": <compile_error | runtime_error | semantic_mismatch | unknown>,
-  "KEY_ERROR_EXCERPT": <concise, relevant excerpt from the error log>,
-  "ROOT_CAUSE": <clear explanation of the underlying issue>,
-  "REPAIR_INTENT": <single-sentence structural fix goal>,   
-  "MODIFICATION_GUIDANCE":<primary actionable change for the next kernel generation>
+  "errors": [
+    {
+    "operator_context": <name or position of operator/fusion segment>,
+    "error_type": <compile_error | runtime_error | semantic_mismatch | unknown>,
+    "key_error_excerpt": <concise, relevant excerpt from the error log>,
+    "root_cause": <explanation of the underlying issue>,
+    "repair_intent": <single-sentence structural fix goal>
+    }
+  ]
 }
 [/ERROR_REPORT]
 """)

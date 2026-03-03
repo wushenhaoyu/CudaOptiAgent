@@ -13,7 +13,8 @@ from utils.utils import extract_error_report, extract_json, write_file
 class Validator(LLM):
     def __init__(self, args: Dict):
 
-        super().__init__(server_name=args.server_name, model=args.model, max_tokens=16384, temperature=1.0, top_p=1.0)
+        #super().__init__(server_name=args.server_name, model=args.model, max_tokens=16384, temperature=1.0, top_p=1.0)
+        super().__init__(server_name="openai", model="gpt-5-mini", max_tokens=16384, temperature=0.8, top_p=1.0)
 
     def generate_init_error_report(self, current_dir: Path, source_code: str, entry_code: str, kernel_code: str, error_log: str):
         tqdm.write("generate_init_error_report")

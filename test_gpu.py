@@ -25,7 +25,7 @@ def align_params(ref_model, test_model):
             print(f"  Skipped param: {name} (not found or shape mismatch)")
 
 if __name__ == '__main__':
-    device = torch.device('cuda:1')
+    device = torch.device('cuda:4')
     
     init_inputs = get_init_inputs()
     inputs = get_inputs()
