@@ -134,9 +134,15 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                 # value error 
                 # -------------------------------------------------
                 elif error_type == "value_error":
-
                     print("⚠ Output mismatch detected.")
-                    break
+                    validator.generate_init_error_report(
+                        task_root,
+                        current_dir,
+                        read_file("./agent/template/example/value_debug.py"),
+                        read_file(task_root / "spec" / "entry.py"),
+                        read_file(task_root / "spec" / "ref.py")
+                    )
+                    
                 else:
                     print("⚠ error detected.")
                     error_report = validator.generate_error_report(task_root, 

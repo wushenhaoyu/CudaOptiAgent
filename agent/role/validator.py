@@ -6,8 +6,8 @@ from typing import Dict
 from agent.llm import LLM
 from agent.settings import Validator_settings
 from scripts.run_ncu import profile_with_ncu
-from agent.template.validator import ANALYZE_CUDA_ERROR_TEMPLATE, GENERATE_ERROR_REPORT_TEMPLATE, INIT_CUDA_ERROR_VALIDATOR_TEMPLATE, INIT_CUDA_IMPLEMNT_REPORT_VALIDATOR_TEMPLATE
-from utils.utils import extract_error_report, extract_json, write_file
+from agent.template.validator import ANALYZE_CUDA_ERROR_TEMPLATE, DEBUG_SCRIPT_TEMPLATE, GENERATE_ERROR_REPORT_TEMPLATE, INIT_CUDA_ERROR_VALIDATOR_TEMPLATE, INIT_CUDA_IMPLEMNT_REPORT_VALIDATOR_TEMPLATE
+from utils.utils import extract_error_report, extract_json, strip_fence, write_file
 
 
 
@@ -29,7 +29,7 @@ class Validator(LLM):
         return out
     
     def generate_error_report(self,  root_dir: Path, current_dir: Path, error_message:str, task_description: str, file_list: str, selected_files_content: str):
-        
+        tqdm.write("generate_init_error_report")
         prompt = GENERATE_ERROR_REPORT_TEMPLATE.substitute(
             error_message=error_message,
             task_description=task_description,
@@ -42,22 +42,17 @@ class Validator(LLM):
         return out
     
 
-    def generate_init_error_report(self, current_dir: Path, source_code: str, entry_code: str, kernel_code: str, error_log: str):
-        tqdm.write("generate_init_error_report")
-        prompt = INIT_CUDA_ERROR_VALIDATOR_TEMPLATE.substitute(
-            source_code=source_code,
-            #entry_code=entry_code,
-            kernel_code=kernel_code,
-            error_log=error_log
+    def generate_init_error_report(self, root_dir: Path, current_dir: Path, debug_example: str, entry_code: str, ref_code: str):
+        tqdm.write("generate value debug script...")
+        prompt = DEBUG_SCRIPT_TEMPLATE.substitute(
+            debug_example = debug_example,
+            entry_code = entry_code,
+            ref_code =  ref_code
         )
-        while True:
-            out = self.chat(prompt)
-            error_report = extract_error_report(out)
-            if error_report is not None:
-                break
-        write_file(current_dir / "validator_io.txt", out)
-        write_file(current_dir / "error_report.txt", str(error_report))  
-        return error_report
+        out = self.chat(prompt)
+        out = strip_fence(out)
+        write_file(root_dir / "spec" / "value_debug.py", out)
+
     
     def generate_init_cuda_impl_report(self, root_dir: Path, source_code: str, kernel_code: str):
         tqdm.write("generate_init_cuda_impl_report")

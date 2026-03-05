@@ -105,49 +105,43 @@ Rules:
 - Always return valid JSON only.
 """)
 
-INIT_CUDA_ERROR_VALIDATOR_TEMPLATE = Template("""
-You are an expert CUDA kernel debugging specialist. Your goal is to analyze compilation errors, runtime errors, or correctness failures in fused kernels, and precisely identify the most likely root cause and the code regions responsible.
+DEBUG_SCRIPT_TEMPLATE = Template("""
+You are a PyTorch CUDA verification engineer. Your task is to generate a Python script that helps debug numerical errors in a CUDA kernel implementation.
 
-You are given:
+Key principles:
+- The CUDA implementation is the **target under inspection**.
+- The PyTorch implementation is the **correct reference**.
+- The script must compare both implementations in order to detect numerical discrepancies.
+- For each kernel invocation, **only save the first observed result**.
+- The PyTorch reference result must also be saved correspondingly.
+- The script should strictly follow the structure demonstrated in the example.
 
-PyTorch Reference Semantics:
+Strict requirements:
+- Do NOT include any assumptions.
+- Do NOT include any synthetic test code.
+- Do NOT add explanations, comments, or extra text outside the script.
+- The generated code must strictly match the format used in the example.
+
+Example:
 ```python
-$source_code
+$debug_example
+```
 
-Generated CUDA Kernel Code:
+Input:
+Optimized entry implementation:
+```python
+$entry_code
+```
+Reference PyTorch implementation:
+```python
+$ref_code
+```
+Output:
+Generate the complete Python script.
 
-$kernel_code
-
-Error Output:
-$error_log
-
-Instructions
-
-Correlate the original computation semantics with the kernel structure and compiler/runtime diagnostics.
-
-Focus strictly on correctness and safety.
-
-Errors may occur in multiple operators within a fused kernel.
-
-Do NOT suggest line-by-line edits or optimization.
-
-Only report what is evidenced in the log.
-
-Output Format
-
-[ERROR_REPORT]
-{
-  "errors": [
-    {
-    "operator_context": <name or position of operator/fusion segment>,
-    "error_type": <compile_error | runtime_error | semantic_mismatch | unknown>,
-    "key_error_excerpt": <concise, relevant excerpt from the error log>,
-    "root_cause": <explanation of the underlying issue>,
-    "repair_intent": <single-sentence structural fix goal>
-    }
-  ]
-}
-[/ERROR_REPORT]
+Return ONLY the Python code.
+No additional explanations.
+The structure and formatting must match the example exactly.
 """)
 
 
