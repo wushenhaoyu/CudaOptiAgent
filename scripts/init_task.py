@@ -9,7 +9,7 @@ from agent.role.validator import Validator
 from agent.role.planner import Planner
 
 from scripts.run_ncu import profile_with_ncu
-from utils.utils import  delete_folder, copy_folder, dict_to_text, read_file, remove_justification, text_to_dict, write_file, extract_recommendation
+from utils.utils import  delete_folder, copy_folder, dict_to_text, list_all_files, read_file, remove_justification, text_to_dict, write_file, extract_recommendation
 from scripts.test_kernel import test_kernel
 
 
@@ -31,11 +31,6 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
         (task_root / "bootstrap").mkdir(parents=True, exist_ok=True) 
         (task_root / "optimize").mkdir(parents=True, exist_ok=True) 
         
-        final_optimize = task_root / "optimize" / "kernel.cu"
-
-        if final_optimize.exists():
-            print(f"[SKIP] {task_name}: already completed")
-            continue
             
         if not (task_root / "spec" / "ref.py").exists():
             shutil.copy2(task, task_root / "spec" / "ref.py")
@@ -48,6 +43,7 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
         else:
             plan = text_to_dict(read_file(plan_file))
         plan = remove_justification(plan)
+        task_description = plan["task_description"]
         if not (task_root / "spec" / "entry.py").exists():
             coder.generate_entry_code(task_root, 
                                       str(plan),
@@ -86,8 +82,31 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
             #                                str(error_report))
             ##shutil.copy2(current_dir / "kernel.cu", task_root / "spec" / "kernel.cu")
             copy_folder(current_dir / "kernel", task_root / "spec" / "kernel")
-            #msg = test_kernel(task_root, current_dir, args.device)
-            #write_file(current_dir / "result.log", dict_to_text(msg))
+            msg = test_kernel(task_root, current_dir, args.device)
+            write_file(current_dir / "result.log", dict_to_text(msg))
+            if msg['runnable'] == True:
+                break
+            error_analysis = validator.analyze_init_error(task_root,
+                                                          current_dir,
+                                                          read_file(current_dir / "result.log"),
+                                                          str(list_all_files(task_root / "spec")),
+                                                          task_description)
+            most_likely_error_file = error_analysis["most_likely_error_file"]
+            error_type = error_analysis["error_type"]
+
+            show_files = error_analysis["show_files"] if "show_files" in error_analysis else []
+
+            msg["most_likely_error_file"] = most_likely_error_file
+            msg["error_type"] = error_type 
+            if error_type == "parameter_alignment_error":
+                pass
+            elif error_type in ["cuda_illegal_memory", "cuda_device_assert"]:
+                pass
+            elif error_type == "value_error":
+                pass
+            else:
+                pass
+                #error_report = validator.generate_error_report()
             ##while True:
             ##    if msg["runnable"] == True:
             ##        break

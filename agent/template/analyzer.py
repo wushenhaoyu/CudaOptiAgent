@@ -19,6 +19,7 @@ Rules for fusion analysis:
 OUTPUT FORMAT:
 ```json
 {
+  "task_description": "<A concise summary of the task, e.g., 'Image classification using ResNet-like Conv/BN/ReLU blocks'>",
   "fusion_groups": [
     {
       "group_id": 0,

@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import tempfile
+import traceback
 import numpy as np
 import torch
 import torch.nn as nn
@@ -19,7 +20,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from multiprocessing import get_context
 
-from utils.utils import _last_n_lines, _sanitize_error_message
+from utils.utils import _last_n_lines, _sanitize_error_message, sanitize_torch_error
 from utils.metrics import fastp
 '''
 come form https://github.com/OptimAI-Lab/CudaForge
@@ -29,97 +30,149 @@ come form https://github.com/OptimAI-Lab/CudaForge
 
 def test_kernel(root_dir: Path, task_dir: Path, device_idx: int = 0):
     tqdm.write("Testing kernel...")
+
     ctx = get_context("spawn")
     parent_conn, child_conn = ctx.Pipe(duplex=False)
-    p = ctx.Process(target=test_kernel_process, args=(root_dir, task_dir, device_idx, child_conn,))
+
+    p = ctx.Process(
+        target=test_kernel_process,
+        args=(root_dir, task_dir, device_idx, child_conn),
+    )
+
     p.start()
+
     try:
         child_conn.close()
     except Exception:
         pass
+
     p.join()
+
+    # ---------------- Crash detection ----------------
+    if p.exitcode != 0 and not parent_conn.poll():
+        return {
+            "runnable": False,
+            "error_stage": "crash",
+            "error_type": "process_crash",
+            "message": f"Subprocess exited with code {p.exitcode}",
+        }
+
     payload = parent_conn.recv() if parent_conn.poll() else None
+
     try:
         parent_conn.close()
     except Exception:
-        pass   
-    if isinstance(payload, tuple) and len(payload) == 2 and payload[0] in ("ok", "err"):
+        pass
+
+    if (
+        isinstance(payload, tuple)
+        and len(payload) == 2
+        and payload[0] in ("ok", "err")
+    ):
         tag, data = payload
+
         if tag == "ok":
             metrics = data
             metrics["runnable"] = True
-            ref  = np.array([metrics["ref_latency_ms"]["avg"]])
-            test = np.array([metrics["test_latency_ms"]["avg"]])
-            fast1 = fastp(np.array([True]), ref, test, 1, 1)
         else:
-            metrics = {"runnable": False,"message": data}
+            metrics = {"runnable": False}
+            metrics.update(data)
     else:
         metrics = {"runnable": False}
+
     return metrics
-            
-def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, conn = None):
+
+
+# ============================================================
+# Child process wrapper
+# ============================================================
+
+def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, conn=None):
     try:
         torch.cuda.set_device(device_idx)
-        res = _test_kernel_process(root_dir, task_dir, device_idx, conn)
+        res = _test_kernel_process(root_dir, task_dir, device_idx)
         conn.send(("ok", res))
-    except AssertionError as e:
+
+    except ParameterAlignmentError as e:
         conn.send((
             "err",
             {
-                "type": "parameter_alignment_error",
-                "message": str(e),
+                "error_stage": "param_align",
+                "error_type": "parameter_alignment_error",
+                "message": sanitize_torch_error(str(e))
             }
         ))
+
     except CompilationError as e:
         conn.send((
             "err",
             {
-                "type": "compilation_error",
-                "message": str(e),   
+                "error_stage": "build",
+                "error_type": "compilation_error",
+                "message": sanitize_torch_error(str(e))
             }
         ))
+
     except ValueError as e:
         conn.send((
             "err",
             {
-                "type": "value_error",
-                "message": str(e),
+                "error_stage": "numerical",
+                "error_type": "output_mismatch",
+                "message": sanitize_torch_error(str(e))
             }
         ))
-    except Exception as e:
+
+    except RuntimeError as e:
         conn.send((
             "err",
             {
-                "type": "runtime_error",
-                "message": str(e),
+                "error_stage": "forward",
+                "error_type": "runtime_error",
+                "message": sanitize_torch_error(str(e))
             }
         ))
-    #except Exception as e:
-    #    # Clean the error message if helper is available; otherwise fall back to str(e)
-    #    try:
-    #        msg = str(e)
-    #        # cleaned = _sanitize_error_message(e)
-    #        #msg = _last_n_lines(cleaned)
-    #    except Exception:
-    #        msg = str(e)
-    #    conn.send(("err", msg))
 
-def _test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, conn = None):
+    except Exception as e:
+        import traceback as _tb
+        conn.send((
+            "err",
+            {
+                "error_stage": "unknown",
+                "error_type": "unknown_error",
+                "message": sanitize_torch_error(_tb.format_exc())
+            }
+        ))
 
+
+# ============================================================
+# Actual kernel test logic
+# ============================================================
+
+def _test_kernel_process(
+    root_dir: Path,
+    task_dir: Path,
+    device_idx: int = 0,    
+):
     dev = torch.device(f"cuda:{device_idx}")
 
-    ref_mod , _ = _capture_import(root_dir / "spec" / "ref.py")
-    test_mod , _ = _capture_import(root_dir / "spec" / "entry.py")
+    ref_mod, _ = _capture_import(root_dir / "spec" / "ref.py")
+    test_mod, _ = _capture_import(root_dir / "spec" / "entry.py")
 
     RefModel = getattr(ref_mod, "Model", None)
     get_inputs = getattr(ref_mod, "get_inputs", None)
     ModelNew = getattr(test_mod, "ModelNew", None)
 
     if None in (RefModel, get_inputs):
-        raise RuntimeError(f"Reference '{root_dir / 'spec' / 'ref.py'}' must define Model and get_inputs().")
+        raise RuntimeError(
+            f"Reference '{root_dir / 'spec' / 'ref.py'}' must define Model and get_inputs()."
+        )
+
     if ModelNew is None:
-        raise RuntimeError(f"Candidate '{root_dir / 'spec' / 'entry.py'}' must define class ModelNew.")
-    
+        raise RuntimeError(
+            f"Candidate '{root_dir / 'spec' / 'entry.py'}' must define class ModelNew."
+        )
+
     init_args: List[Any] = []
     init_kwargs: Dict[str, Any] = {}
 
@@ -127,13 +180,15 @@ def _test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, co
 
     if callable(get_init_inputs_ref):
         init_obj = get_init_inputs_ref()
+
         if isinstance(init_obj, dict):
             init_kwargs = dict(init_obj)
         elif isinstance(init_obj, (list, tuple)):
             init_args = list(init_obj)
         elif init_obj is not None:
-            raise TypeError("get_init_inputs() must return list/tuple (as *args) or dict (as **kwargs).")
-    
+            raise TypeError(
+                "get_init_inputs() must return list/tuple (*args) or dict (**kwargs)."
+            )
 
     def _first_tensor(x):
         if isinstance(x, torch.Tensor):
@@ -142,72 +197,63 @@ def _test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, co
             for t in x:
                 if isinstance(t, torch.Tensor):
                     return t
-        raise TypeError("Model forward did not return a Tensor (or a sequence containing a Tensor).")
+        raise TypeError(
+            "Model forward did not return a Tensor (or a sequence containing a Tensor)."
+        )
 
-    try:
-        ctx = torch.cuda.device(0)
-        with ctx:
-            # Fix input randomness
-            inp = get_inputs()
-            if not isinstance(inp, (list, tuple)):
-                inp = [inp]
+    with torch.cuda.device(device_idx):
 
-            # Fix parameter initialization: set seed before constructing each side
-            ref_model  = RefModel(*init_args, **init_kwargs)
+        inp = get_inputs()
+        if not isinstance(inp, (list, tuple)):
+            inp = [inp]
 
-            test_model = ModelNew(*init_args, **init_kwargs)
+        ref_model = RefModel(*init_args, **init_kwargs).to(dev)
+        test_model = ModelNew(*init_args, **init_kwargs).to(dev)
 
-            # Parameter alignment (prefer Model→ModelNew pair-specific, then task custom, finally generic)
-            align_stats = try_align_params(ref_model, test_model, ref_mod=ref_mod, test_mod=test_mod)
+        align_stats = try_align_params(
+            ref_model, test_model, ref_mod=ref_mod, test_mod=test_mod
+        )
 
-            # Forward pass (sync to surface errors immediately)
-            torch.cuda.synchronize(dev)
-            ref_out,  _ = _run_once(ref_model,  inp, dev)
-            test_out, _ = _run_once(test_model, inp, dev)
-            torch.cuda.synchronize(dev)
-            # Normalize to Tensor and ensure contiguous
-            ref_out  = _first_tensor(ref_out).contiguous()
-            test_out = _first_tensor(test_out).contiguous()
-            if ref_out.dtype != test_out.dtype:
-                test_out = test_out.to(ref_out.dtype)
+        torch.cuda.synchronize(dev)
 
-            # Error & allclose
-            diff = (test_out - ref_out).abs()
-            max_err  = diff.max().item()
-            mean_err = diff.mean().item()
+        ref_out, _ = _run_once(ref_model, inp, dev)
+        test_out, _ = _run_once(test_model, inp, dev)
 
-            if not torch.allclose(ref_out, test_out, atol=5e-3, rtol=5e-3):
-                def _fmt_trunc(t, head=3, tail=3):
-                    total = t.numel()
-                    if total <= head + tail:
-                        return str(t.tolist())
-                    h = ", ".join(f"{v:.4f}" for v in t[:head].tolist())
-                    e = ", ".join(f"{v:.4f}" for v in t[-tail:].tolist())
-                    return f"[{h} ... {e}] (len={total})"
-                
-                ref_str = _fmt_trunc(ref_out.flatten(), 4, 4)
-                test_str = _fmt_trunc(test_out.flatten(), 4, 4)
-                
-                raise ValueError(
-                    f"Outputs are not close (atol={5e-3}, rtol={5e-3}). "
-                    f"max_abs_err={max_err:.3e}, mean_abs_err={mean_err:.3e}\n"
-                    f"  ref:  {ref_str}\n"
-                    f"  test: {test_str}"
-                )
+        torch.cuda.synchronize(dev)
 
-            # Timing
-            ref_t  = _bench(ref_model,  inp, dev, 2, 5)
-            test_t = _bench(test_model, inp, dev, 2, 5)
+        ref_out = _first_tensor(ref_out).contiguous()
+        test_out = _first_tensor(test_out).contiguous()
 
-            torch.cuda.synchronize(dev)
+        if ref_out.dtype != test_out.dtype:
+            test_out = test_out.to(ref_out.dtype)
 
-    except ValueError:
-        raise
-    except Exception:
-        import traceback as _tb
-        raise RuntimeError(_tb.format_exc()) from None
+        diff = (test_out - ref_out).abs()
+        max_err = diff.max().item()
+        mean_err = diff.mean().item()
 
-    # ------------ Aggregate results -------------------------------------
+        if not torch.allclose(ref_out, test_out, atol=5e-3, rtol=5e-3):
+
+            def _fmt_trunc(t, head=4, tail=4):
+                t = t.flatten()
+                total = t.numel()
+                if total <= head + tail:
+                    return str(t.tolist())
+                h = ", ".join(f"{v:.4f}" for v in t[:head].tolist())
+                e = ", ".join(f"{v:.4f}" for v in t[-tail:].tolist())
+                return f"[{h} ... {e}] (len={total})"
+
+            raise ValueError(
+                f"Outputs are not close (atol=5e-3, rtol=5e-3). "
+                f"max_abs_err={max_err:.3e}, mean_abs_err={mean_err:.3e}\n"
+                f"ref:  {_fmt_trunc(ref_out)}\n"
+                f"test: {_fmt_trunc(test_out)}"
+            )
+
+        ref_t = _bench(ref_model, inp, dev, 2, 5)
+        test_t = _bench(test_model, inp, dev, 2, 5)
+
+        torch.cuda.synchronize(dev)
+
     result: Dict[str, Any] = {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "max_abs_err": max_err,
@@ -215,17 +261,18 @@ def _test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, co
         "ref_latency_ms": {
             "avg": sum(ref_t) / len(ref_t),
             "min": min(ref_t),
-            "max": max(ref_t)
+            "max": max(ref_t),
         },
         "test_latency_ms": {
             "avg": sum(test_t) / len(test_t),
             "min": min(test_t),
-            "max": max(test_t)
+            "max": max(test_t),
         },
         "model_init_args": init_args,
         "model_init_kwargs": init_kwargs,
-        "align_stats": align_stats,  # Alignment summary (incl. whether Model→ModelNew pair-specific aligner was used)
+        "align_stats": align_stats,
     }
+
     return result
 
 @torch.no_grad()
@@ -235,7 +282,7 @@ def align_params_generic(ref_model: nn.Module, test_model: nn.Module) -> dict[st
 
     copied_same, unique_shape_copied, mapped, skipped = 0, 0, 0, 0
     aligned_test: set[str] = set()
-    missing_params: list[str] = []  # 新增：记录未对齐的参数
+    missing_params: list[str] = []  
 
     # 1) Same name & same shape
     for name, t_dst in test_named.items():

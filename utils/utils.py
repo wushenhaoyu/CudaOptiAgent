@@ -1,13 +1,52 @@
 import json
 import os
+from pathlib import Path
 import re
 import shutil
 import textwrap
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 
 import re
 import os
+
+import re
+
+def sanitize_torch_error(err_msg: str) -> str:
+    """
+    Keep only the key exception message and signature for LLM input.
+    Drop long tracebacks and tensor content.
+    """
+    lines = err_msg.splitlines()
+    sanitized_lines = []
+
+    # Search backwards for the last exception type line
+    for line in reversed(lines):
+        if re.match(r"^\w+Error: ", line):
+            sanitized_lines.append(line)
+            break
+        if "incompatible function arguments" in line:
+            sanitized_lines.append(line)
+
+    # Search for 'Invoked with:' and sanitize tensors
+    for line in lines:
+        if "Invoked with:" in line:
+            args_str = line.split("Invoked with:")[1].strip()
+            args_sanitized = re.sub(r'tensor\([^\)]*\)', '<tensor>', args_str)
+            sanitized_lines.append(f"Invoked with: {args_sanitized}")
+            break
+
+    return "\n".join(sanitized_lines)
+
+def list_all_files(root_dir: Path) -> List[str]:
+
+    if not root_dir.exists():
+        raise FileNotFoundError(f"{root_dir} does not exist")
+    files = []
+    for f in root_dir.rglob("*"):
+        if f.is_file():
+            files.append(str(f.relative_to(root_dir)))
+    return sorted(files)
 
 
 def copy_folder(src_folder, dst_folder):
@@ -26,10 +65,10 @@ def copy_folder(src_folder, dst_folder):
             shutil.copytree(src_folder, dst_folder, dirs_exist_ok=True)
         else:
             shutil.copytree(src_folder, dst_folder)
-        print(f"Copy success: {src_folder} -> {dst_folder}")
+        #print(f"Copy success: {src_folder} -> {dst_folder}")
         return True
     except Exception as e:
-        print(f"Copy failed: {e}")
+        #print(f"Copy failed: {e}")
         return False
 
 
@@ -52,7 +91,7 @@ def delete_folder(folder_path, delete_self=True):
         
         if delete_self:
             shutil.rmtree(folder_path)
-            print(f"Deleted folder: {folder_path}")
+            #print(f"Deleted folder: {folder_path}")
         else:
             for item in os.listdir(folder_path):
                 item_path = os.path.join(folder_path, item)
@@ -60,11 +99,11 @@ def delete_folder(folder_path, delete_self=True):
                     os.remove(item_path)
                 elif os.path.isdir(item_path):
                     shutil.rmtree(item_path)
-            print(f"Cleared folder contents: {folder_path}")
+            #print(f"Cleared folder contents: {folder_path}")
         
         return True
     except Exception as e:
-        print(f"Delete failed: {e}")
+        #print(f"Delete failed: {e}")
         return False
 
 
@@ -86,7 +125,7 @@ def save_cuda_files_clean(api_output: str, output_dir: str = "./cuda_kernels"):
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content.strip() + '\n')
         saved_files.append(filename)
-        print(f"Saved {filename}")
+        #print(f"Saved {filename}")
 
     if not saved_files:
         print("No CUDA files found in the API output.")
