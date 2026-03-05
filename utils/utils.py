@@ -12,6 +12,9 @@ import os
 
 import re
 
+
+
+
 def sanitize_torch_error(err_msg: str) -> str:
     """
     Keep only the key exception message and signature for LLM input.
@@ -37,6 +40,89 @@ def sanitize_torch_error(err_msg: str) -> str:
             break
 
     return "\n".join(sanitized_lines)
+
+
+def load_related_files(related_files, project_root):
+    """
+    Load file contents for a list of related files.
+
+    Parameters
+    ----------
+    related_files : list[str]
+        List of file paths relative to project_root.
+    project_root : str
+        Root directory of the project.
+
+    Returns
+    -------
+    dict
+        {
+            "file_name": "<file content>",
+            ...
+        }
+    """
+    file_contents = {}
+    seen = set()
+
+    for rel_path in related_files:
+        if rel_path in seen:
+            continue
+        seen.add(rel_path)
+
+        abs_path = os.path.join(project_root, rel_path)
+
+        if not os.path.exists(abs_path):
+            print(f"[Warning] File not found: {abs_path}")
+            continue
+
+        if not os.path.isfile(abs_path):
+            print(f"[Warning] Not a file: {abs_path}")
+            continue
+
+        try:
+            with open(abs_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            file_contents[rel_path] = content
+        except Exception as e:
+            print(f"[Error] Failed to read {abs_path}: {e}")
+
+    return file_contents
+
+
+def load_show_files(show_files):
+    """
+    Args:
+        show_files (list[dict]): 
+            Example:
+            [
+                {"file_path": "kernel/avgpool3d_plus_gelu_epilogue.cu"},
+                {"file_path": "entry.py"}
+            ]
+
+    Returns:
+        dict[str, str]: 
+            {
+                "avgpool3d_plus_gelu_epilogue.cu": "<file content>",
+                "entry.py": "<file content>"
+            }
+    """
+    result = {}
+
+    for item in show_files:
+        file_path = item.get("file_path")
+        if not file_path:
+            continue
+
+        path_obj = Path(file_path)
+
+        try:
+            content = path_obj.read_text(encoding="utf-8")
+        except Exception as e:
+            content = f"<<ERROR READING FILE: {e}>>"
+
+        result[path_obj.name] = content
+
+    return result
 
 def list_all_files(root_dir: Path) -> List[str]:
 

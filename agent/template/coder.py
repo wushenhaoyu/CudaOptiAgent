@@ -26,28 +26,18 @@ $example_entry_code
 Constraints
 
 You must:
-
-Preserve the original model's input/output semantics
-
-Class name must be "ModelNew"
-
-Sources directory is $kernel_dir; do NOT change it
-
-Variable names in __init__ must match $source_code exactly for param alignment
-
-Generate one CUDA function per fusion group/operator
-
-Forward must call the corresponding CUDA functions in order, reusing the same kernel for repeated operators if indicated
-
-Output Requirements
-
-Generate the complete Python code for the ModelNew class
-
-Forward should sequentially invoke the CUDA kernels from $fusion_plan
-
-No explanations or extra comments outside code
-
-CUDA extension names must be derived from the content hash of each kernel file
+- Preserve the original model's input/output semantics
+- Class name must be "ModelNew"
+- Sources directory is $kernel_dir; do NOT change it
+- Variable names in __init__ must match $source_code exactly for param alignment
+- Generate one CUDA function per fusion group/operator
+- Forward must call the corresponding CUDA functions in order, reusing the same kernel for repeated operators if indicated
+                                     
+Output Requirements:
+- Generate the complete Python code for the ModelNew class
+- Forward should sequentially invoke the CUDA kernels from $fusion_plan
+- No explanations or extra comments outside code
+- CUDA extension names must be derived from the content hash of each kernel file
 """)
 
 REPAIR_ENTRY_CODER_TEMPLATE = Template("""
@@ -67,16 +57,18 @@ Here is some useful information for you:
 $error_report
                                        
 You must:
-1. Load a CUDA extension using torch.utils.cpp_extension.load
-2. Call this CUDA function inside the model's forward method
-3. Preserve the original model's input/output semantics
-4. Class name must be "ModelNew"
-5. The exposed CUDA function name is: $cuda_function_name
-6. The sources name is included as $kernel_dir, please do NOT change it
-7. The CUDA extension name MUST be derived from the CONTENT HASH of the file at $kernel_dir.You must read the file, compute a hash (e.g. md5 or sha1), and use this hash as part of the namepassed to torch.utils.cpp_extension.load, so that changing kernel.cu automatically triggers recompilation.
-               
-# Output                               
-No any assumptions. Only generate the complete Python code now."""
+- Preserve the original model's input/output semantics
+- Class name must be "ModelNew"
+- Sources directory is $kernel_dir; do NOT change it
+- Variable names in __init__ must match $source_code exactly for param alignment
+- Generate one CUDA function per fusion group/operator
+- Forward must call the corresponding CUDA functions in order, reusing the same kernel for repeated operators if indicated
+                                     
+Output Requirements:
+- Generate the complete Python code for the ModelNew class
+- Forward should sequentially invoke the CUDA kernels from $fusion_plan
+- No explanations or extra comments outside code
+- CUDA extension names must be derived from the content hash of each kernel file"""
 )
 
 INIT_CUDA_CODER_TEMPLATE = Template("""
@@ -126,49 +118,71 @@ Each wrapper function name matches kernel_name for Python calls
 """)
 
 REPAIR_CUDA_CODER_TEMPLATE = Template("""
-You are a CUDA kernel developer tasked with fixing a previously generated CUDA kernel that failed to run. 
+You are a CUDA/PyTorch integration engineer responsible for fixing ONE specific file in a multi-file acceleration project.
 
-REQUIREMENTS:
+Your goal is to fix the target file so that the previously detected errors are resolved.
 
-1. Do NOT use PyTorch, ATen, Thrust, or any external tensor library.
-2. All computations MUST be implemented explicitly using CUDA device code (__global__, __device__).
-3. Input and output are plain device pointers (float*, __half*, etc.), not tensors.
-4. Respect the fusion plan strictly. Do NOT fuse across forbidden boundaries.
-5. Preserve execution order. Do NOT redesign the computation graph.
-6. You may reuse the same kernel for multiple fusion groups if boundaries allow.
-7. Focus strictly on correctness and interface compatibility. Do NOT optimize performance yet.
+You are ONLY allowed to modify the target file.
+You MUST NOT modify or redesign other files.
 
-INPUTS:
+----------------------------------------------------------------------
+PROJECT CONTEXT
+----------------------------------------------------------------------
 
-- Original Python source code:
+Available files:
+- entry.py: Python entry code
+- kernel.cu: CUDA implementation + pybind binding
+- ref.py: original PyTorch reference model
+- There may be other auxiliary files.
+
+All file names:
+$file_list
+
+----------------------------------------------------------------------
+TARGET FILE TO MODIFY
+----------------------------------------------------------------------
+
+Target file:
+$target_file_name
+
+Current content of target file:
 ```python
-$source_code
+$target_file_content
+RELATED FILES (read-only)
 
-Python entry interface:
+These files are provided for interface and logic reference.
+You must not modify them.
 
-$entry_code
+$related_files_content
 
-Last failed CUDA kernel:
+ERRORS RELATED TO THIS FILE
 
-$last_kernel_code
+$error_items
 
-Hints for fixing:
-$hints
+REQUIREMENTS
 
+Fix ONLY issues that belong to the target file.
 
-OUTPUT:
+Do NOT redesign architecture.
 
-A single .cu file implementing the corrected kernels.
+Do NOT change function signatures unless required by error description.
 
-Output ONLY the .cu file contents; no explanations or comments outside the code.
+If function signature is changed, it MUST stay compatible with related files.
 
-Must compile and run with the provided Python entry code.
+Keep CUDA kernel launch, pybind definitions, and entry interface consistent.
 
-No testing code included.
+Focus strictly on correctness.
 
-CUDA module name: $cuda_module_name
+Output the FULL corrected file content.
 
-CUDA function name: $cuda_function_name
+OUTPUT FORMAT
 
-All computations must be implemented inside this .cu file using CUDA device code only.
+Return ONLY the full corrected content of:
+
+$target_file_name
+
+No explanations.
+No JSON.
+No markdown fences.
+No extra commentary.
 """)

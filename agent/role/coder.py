@@ -5,7 +5,7 @@ from typing import Dict
 from agent.llm import LLM
 from agent.settings import Coder_settings
 from agent.template.coder import INIT_ENTRY_CODER_TEMPLATE, INIT_CUDA_CODER_TEMPLATE, REPAIR_CUDA_CODER_TEMPLATE, REPAIR_ENTRY_CODER_TEMPLATE
-from utils.utils import save_cuda_files_clean, strip_fence, write_file, read_file
+from utils.utils import load_related_files, save_cuda_files_clean, strip_fence, write_file, read_file
 
 
 
@@ -63,8 +63,6 @@ class Coder(LLM):
             source_code=source_code,
             entry_code=entry_code,
             fusion_plan=fusion_plan,
-            #cuda_module_name=cuda_module_name,
-            #cuda_function_name=cuda_function_name
         )
         tqdm.write("generate_init_cuda")
 
@@ -81,29 +79,28 @@ class Coder(LLM):
         #write_file(current_dir / "kernel.cu", cuda_code)
 
         
-    def repair_init_cuda_code(self, 
-                            current_dir: Path, 
-                            source_code: str, 
-                            entry_code:str,
-                            last_kernel_code: str,
-                            cuda_module_name: str, 
-                            cuda_function_name: str,
-                            hints: str):
+    def repair_init_cuda_code(self,
+                              root_dir: Path, 
+                              current_dir: Path, 
+                              file_list: str, 
+                              repair_file_list: list):
         tqdm.write("repair_init_cuda")
-        prompt = REPAIR_CUDA_CODER_TEMPLATE.substitute(
-            source_code=source_code,
-            entry_code=entry_code,
-            last_kernel_code=last_kernel_code,
-            cuda_module_name=cuda_module_name,
-            cuda_function_name=cuda_function_name,
-            hints=hints
-        )
-
-        write_file(current_dir / "coder_io.txt", f"Input Prompt:\n{prompt}\n")
-
-        cuda_code = strip_fence(self.chat(prompt))
-
-        write_file(current_dir / "kernel.cu", cuda_code)
+        for file , i  in enumerate(repair_file_list):
+            target_file_name = file["file_name"]
+            related_files = file["related_files"]
+            related_files_content = load_related_files(related_files, str(root_dir / "spec"))
+            target_file_content = read_file(root_dir / "spec" / target_file_name)
+            error_items = file["issues"]
+            prompt = REPAIR_CUDA_CODER_TEMPLATE.substitute(
+                file_list=file_list,
+                target_file_name=target_file_name,
+                target_file_content=target_file_content,
+                related_files_content=related_files_content,
+                error_items=error_items
+            )
+            write_file(current_dir / f"coder_io_{i}.txt", f"Input Prompt:\n{prompt}\n")
+            out = strip_fence(self.chat(prompt))
+            write_file(current_dir / "spec" / target_file_name, out)
 
 
 

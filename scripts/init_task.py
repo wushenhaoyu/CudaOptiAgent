@@ -9,7 +9,7 @@ from agent.role.validator import Validator
 from agent.role.planner import Planner
 
 from scripts.run_ncu import profile_with_ncu
-from utils.utils import  delete_folder, copy_folder, dict_to_text, list_all_files, read_file, remove_justification, text_to_dict, write_file, extract_recommendation
+from utils.utils import  delete_folder, copy_folder, dict_to_text, list_all_files, load_show_files, read_file, remove_justification, text_to_dict, write_file, extract_recommendation
 from scripts.test_kernel import test_kernel
 
 
@@ -58,90 +58,102 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
         bootstrap = Path(task_root / "bootstrap")
         error_report = None
         impl_report  = None
+        msg = None
         bootstrap_final = task_root / "bootstrap" / "kernel.cu"
-        for i in tqdm(range(args.bootstrap_iter), desc="Bootstrap Iterations"):
-            msg = {}
-            (bootstrap / f"iter_{i}").mkdir(parents=True, exist_ok=True)
-            current_dir = bootstrap / f"iter_{i}"
-            if i == 0:
-                coder.gernerate_init_cuda_code(current_dir, 
-                                                read_file('./agent/template/example/example.py'), 
-                                                read_file('./agent/template/example/example.cu'), 
-                                                read_file(task), 
-                                                read_file(task_root / "spec" / "entry.py"),
-                                                str(plan),
-                                                task_name_no_num, 
-                                                task_name_no_num)
-            #else:
-            #    coder.repair_init_cuda_code(current_dir,
-            #                                read_file(str(task_root / "spec" / "ref.py")),
-            #                                read_file(str(task_root / "spec" / "entry.py")),
-            #                                read_file(str(task_root / "spec" / "kernel.cu")),
-            #                                task_name_no_num, 
-            #                                task_name_no_num, 
-            #                                str(error_report))
-            ##shutil.copy2(current_dir / "kernel.cu", task_root / "spec" / "kernel.cu")
-            copy_folder(current_dir / "kernel", task_root / "spec" / "kernel")
-            msg = test_kernel(task_root, current_dir, args.device)
-            write_file(current_dir / "result.log", dict_to_text(msg))
-            if msg['runnable'] == True:
-                break
-            error_analysis = validator.analyze_init_error(task_root,
-                                                          current_dir,
-                                                          read_file(current_dir / "result.log"),
-                                                          str(list_all_files(task_root / "spec")),
-                                                          task_description)
-            most_likely_error_file = error_analysis["most_likely_error_file"]
-            error_type = error_analysis["error_type"]
+        kernel_iter = 0
 
-            show_files = error_analysis["show_files"] if "show_files" in error_analysis else []
+        while kernel_iter < args.bootstrap_iter:
 
-            msg["most_likely_error_file"] = most_likely_error_file
-            msg["error_type"] = error_type 
-            if error_type == "parameter_alignment_error":
-                pass
-            elif error_type in ["cuda_illegal_memory", "cuda_device_assert"]:
-                pass
-            elif error_type == "value_error":
-                pass
+            print(f"\n=== Kernel Iteration {kernel_iter} ===")
+
+            current_dir = bootstrap / f"iter_{kernel_iter}"
+            current_dir.mkdir(parents=True, exist_ok=True)
+
+
+            if kernel_iter == 0:
+                coder.gernerate_init_cuda_code(
+                    current_dir,
+                    read_file('./agent/template/example/example.py'),
+                    read_file('./agent/template/example/example.cu'),
+                    read_file(task),
+                    read_file(task_root / "spec" / "entry.py"),
+                    str(plan),
+                    task_name_no_num,
+                    task_name_no_num
+                )
+                copy_folder(current_dir / "kernel", task_root / "spec" / "kernel")
             else:
-                pass
-                #error_report = validator.generate_error_report()
-            ##while True:
-            ##    if msg["runnable"] == True:
-            ##        break
-            ##    if msg["message"]['type'] != "parameter_alignment_error":
-            ##        break
-            ##    else:
-            ##        msg["advice"] = "please align ref model and test model parameters, hold the deep learning model paramter variable name same as much as possible, and make sure the model forward can run without error. "
-            ##        coder.repair_entry_code(task_root, 
-            ##                                read_file(task), 
-            ##                                task_name_no_num, 
-            ##                                task_name_no_num, 
-            ##                                str(task_root / "spec" / "kernel.cu"), 
-            ##                                read_file(task_root / "spec" / "entry.py"), 
-            ##                                str(msg)
-            ##        )
-            ##        msg = test_kernel(task_root, current_dir, args.device)
-            #if msg["runnable"] == True:
-            #    shutil.copy2(current_dir / "kernel.cu", bootstrap_final)
-            #    impl_report = validator.generate_init_cuda_impl_report(current_dir, 
-            #                                                           read_file(str(task_root / "spec" / "ref.py")), 
-            #                                                           read_file(str(task_root / "spec" / "kernel.cu")))
-            #    break
-            #error_report = validator.generate_init_error_report(
-            #            current_dir,
-            #            read_file(str(task_root / "spec" / "ref.py")),
-            #            read_file(task_root / "spec" / "entry.py"),
-            #            read_file(task_root / "spec" / "kernel.cu"),
-            #            read_file(current_dir / "result.log")
-            #        )
-            #if error_report['ERROR_FILE'] == "entry.py":
-            #    coder.repair_entry_code(task_root, read_file(task), task_name_no_num, task_name_no_num, str(task_root / "spec" / "kernel.cu"), read_file(task_root / "spec" / "entry.py"), error_report)
+                repair_file_list = error_report["files"]
+                coder.repair_init_cuda_code(
+                    root_dir=task_root,
+                    current_dir=current_dir,
+                    file_list=str(list_all_files(task_root / "spec")),
+                    repair_file_list=repair_file_list
+                )
+                copy_folder(task_root / "spec" / "kernel" , current_dir / "kernel")
+            while True:
 
+                msg = test_kernel(task_root, current_dir, args.device)
+                write_file(current_dir / "result.log", dict_to_text(msg))
+
+                if msg['runnable']:
+                    print("✅ Success")
+                    break
+
+                error_analysis = validator.analyze_init_error(
+                    task_root,
+                    current_dir,
+                    read_file(current_dir / "result.log"),
+                    str(list_all_files(task_root / "spec")),
+                    task_description
+                )
+
+                error_type = error_analysis["error_type"]
+                most_likely_error_file = error_analysis["most_likely_error_file"]
+                show_files = error_analysis["show_files"] if "show_files" in error_analysis else []
+
+                msg["most_likely_error_file"] = most_likely_error_file 
+                msg["error_type"] = error_type
+                # -------------------------------------------------
+                # cuda illegal memory
+                # -------------------------------------------------
+                if error_type == "cuda_illegal_memory":
+
+                    print("⚠ CUDA illegal memory access detected.")
+                    break  
+
+                # -------------------------------------------------
+                # cuda device assert
+                # -------------------------------------------------
+                elif error_type == "cuda_device_assert":
+
+                    print("⚠ CUDA device assert detected.")
+                    break
+
+                # -------------------------------------------------
+                # value error 
+                # -------------------------------------------------
+                elif error_type == "value_error":
+
+                    print("⚠ Output mismatch detected.")
+                    break
+                else:
+                    print("⚠ error detected.")
+                    error_report = validator.generate_error_report(task_root, 
+                                                    current_dir, 
+                                                    str(msg), 
+                                                    task_description, 
+                                                    str(list_all_files(task_root / "spec")),
+                                                    load_show_files(show_files))
+                    break
+
+            if msg['runnable']:
+                break
+
+            kernel_iter += 1
 #=========================================== Opti =====================================
         pass
 
-        
+  
 
             

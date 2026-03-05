@@ -28,13 +28,18 @@ class Validator(LLM):
         write_file(current_dir / "error_analysis.json",  json.dumps(out, indent=2))
         return out
     
-    def generate_error_report(self,  root_dir: Path, current_dir: Path, error_message:str, task_description: str, selected_files_content: str):
+    def generate_error_report(self,  root_dir: Path, current_dir: Path, error_message:str, task_description: str, file_list: str, selected_files_content: str):
         
         prompt = GENERATE_ERROR_REPORT_TEMPLATE.substitute(
             error_message=error_message,
             task_description=task_description,
+            file_list=file_list,
             selected_files_content=selected_files_content
         )
+        out = self.chat(prompt)
+        out = extract_json(out)
+        write_file(current_dir / "error_report.json",  json.dumps(out, indent=2))
+        return out
     
 
     def generate_init_error_report(self, current_dir: Path, source_code: str, entry_code: str, kernel_code: str, error_log: str):
