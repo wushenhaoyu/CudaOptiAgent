@@ -66,9 +66,11 @@ class Coder(LLM):
         )
         tqdm.write("generate_init_cuda")
 
-        write_file(current_dir / "coder_io.txt", f"Input Prompt:\n{prompt}\n")
+        write_file(current_dir / "coder_in.txt", f"Input Prompt:\n{prompt}\n")
 
         out = self.chat(prompt)
+
+        write_file(current_dir / "coder_out.txt", f"Output:\n{out}\n")
 
         save_cuda_files_clean(out, str(current_dir / "kernel"))
 

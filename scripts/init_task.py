@@ -8,9 +8,10 @@ from agent.role.coder import Coder
 from agent.role.validator import Validator
 from agent.role.planner import Planner
 
+from scripts.run_value_debug import run_model_debug
 from scripts.run_ncu import profile_with_ncu
 from utils.utils import  delete_folder, copy_folder, dict_to_text, list_all_files, load_show_files, read_file, remove_justification, text_to_dict, write_file, extract_recommendation
-from scripts.test_kernel import test_kernel
+from scripts.run_test_kernel import test_kernel
 
 
 def init_task(tasks: List[Path], run_dir: Path, args: Dict):
@@ -71,17 +72,18 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
 
 
             if kernel_iter == 0:
-                coder.gernerate_init_cuda_code(
-                    current_dir,
-                    read_file('./agent/template/example/example.py'),
-                    read_file('./agent/template/example/example.cu'),
-                    read_file(task),
-                    read_file(task_root / "spec" / "entry.py"),
-                    str(plan),
-                    task_name_no_num,
-                    task_name_no_num
-                )
-                copy_folder(current_dir / "kernel", task_root / "spec" / "kernel")
+                if not (current_dir / "kernel").exists():
+                    coder.gernerate_init_cuda_code(
+                        current_dir,
+                        read_file('./agent/template/example/example.py'),
+                        read_file('./agent/template/example/example.cu'),
+                        read_file(task),
+                        read_file(task_root / "spec" / "entry.py"),
+                        str(plan),
+                        task_name_no_num,
+                        task_name_no_num
+                    )
+                    copy_folder(current_dir / "kernel", task_root / "spec" / "kernel")
             else:
                 repair_file_list = error_report["files"]
                 coder.repair_init_cuda_code(
@@ -123,24 +125,32 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                     break  
 
                 # -------------------------------------------------
-                # cuda device assert
-                # -------------------------------------------------
-                elif error_type == "cuda_device_assert":
-
-                    print("⚠ CUDA device assert detected.")
-                    break
-
-                # -------------------------------------------------
                 # value error 
                 # -------------------------------------------------
                 elif error_type == "value_error":
                     print("⚠ Output mismatch detected.")
-                    validator.generate_init_error_report(
+                    debug_script = task_root / "spec" / "value_debug.py"
+                    if not debug_script.exists():
+                        validator.generate_debug_script(
+                            task_root,
+                            current_dir,
+                            read_file("./agent/template/example/value_debug.py"),
+                            read_file(task_root / "spec" / "entry.py"),
+                            read_file(task_root / "spec" / "ref.py")
+                        )
+                    debug_msg = run_model_debug(task_root / "spec" / "value_debug.py",args.device)
+                    if debug_msg["runnable"]:
+                        break
+                    msg["debug_msg"] = debug_msg              
+                    kernel_report = debug_msg.get("kernel_report", [])
+                    problem_kernel_name = debug_msg.get("first_failing_kernel") + ".cu"
+                    error_report = validator.generate_error_report_(
                         task_root,
                         current_dir,
-                        read_file("./agent/template/example/value_debug.py"),
+                        str(msg),
                         read_file(task_root / "spec" / "entry.py"),
-                        read_file(task_root / "spec" / "ref.py")
+                        problem_kernel_name, 
+                        read_file(task_root / "spec" / "kernel" / problem_kernel_name),
                     )
                     
                 else:

@@ -105,6 +105,75 @@ Rules:
 - Always return valid JSON only.
 """)
 
+
+GENERATE_ERROR_REPORT_TEMPLATE_NO_CONTENT = Template("""
+You are an error analysis assistant for a PyTorch acceleration framework that generates custom CUDA kernels.
+
+Your task:
+1. Analyze the error message.
+2. Examine the selected files.
+3. Group issues by the file that must be modified.
+4. Each file should appear at most once in the output.
+5. For each file, list all concrete issues found inside it.
+
+Input:
+
+- Error message:
+$error_message
+
+- Task description:
+$task_description
+
+- Available files:
+(entry.py is the Python entry code,
+kernel.cu contains CUDA kernels and pybind bindings,
+ref.py is the original PyTorch reference implementation,
+there may be additional .cu/.h files inside the kernel directory)
+$file_list
+
+entry.py:
+```python
+                                                     
+``` \n
+$problem_kernel_name:
+```cuda
+$problem_kernel_content
+```\n
+
+Output strictly in the following JSON format:
+
+{
+  "files": [
+    {
+      "file_name": "<file that must be modified>",
+      "related_files": [
+        "<context file>",
+        "<another context file if needed>"
+      ],
+      "issues": [
+        {
+          "error_snippet": "<minimal relevant snippet>",
+          "error_reason": "<precise explanation>",
+          "suggested_fix": "<actionable fix>"
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+
+- Each file must appear only once.
+- file_name must be one of the Available files.
+- related_files must be chosen from Available files.
+- Keep snippets minimal.
+- suggested_fix must clearly describe WHAT to change and HOW.
+- Do NOT rewrite entire files.
+- Do NOT include commentary outside JSON.
+- Always return valid JSON only.
+""")
+
+
 DEBUG_SCRIPT_TEMPLATE = Template("""
 You are a PyTorch CUDA verification engineer. Your task is to generate a Python script that helps debug numerical errors in a CUDA kernel implementation.
 

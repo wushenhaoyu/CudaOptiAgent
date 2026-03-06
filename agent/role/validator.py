@@ -6,7 +6,7 @@ from typing import Dict
 from agent.llm import LLM
 from agent.settings import Validator_settings
 from scripts.run_ncu import profile_with_ncu
-from agent.template.validator import ANALYZE_CUDA_ERROR_TEMPLATE, DEBUG_SCRIPT_TEMPLATE, GENERATE_ERROR_REPORT_TEMPLATE, INIT_CUDA_ERROR_VALIDATOR_TEMPLATE, INIT_CUDA_IMPLEMNT_REPORT_VALIDATOR_TEMPLATE
+from agent.template.validator import ANALYZE_CUDA_ERROR_TEMPLATE, DEBUG_SCRIPT_TEMPLATE, GENERATE_ERROR_REPORT_TEMPLATE, GENERATE_ERROR_REPORT_TEMPLATE_NO_CONTENT, INIT_CUDA_IMPLEMNT_REPORT_VALIDATOR_TEMPLATE
 from utils.utils import extract_error_report, extract_json, strip_fence, write_file
 
 
@@ -41,8 +41,23 @@ class Validator(LLM):
         write_file(current_dir / "error_report.json",  json.dumps(out, indent=2))
         return out
     
+    def generate_error_report_(self,  root_dir: Path, current_dir: Path, error_message:str, task_description: str, file_list: str, entry_code: str ,problem_kernel_name: str, problem_kenrel_content: str):
+        tqdm.write("generate_init_error_report")
+        prompt = GENERATE_ERROR_REPORT_TEMPLATE_NO_CONTENT.substitute(
+            error_message=error_message,
+            task_description=task_description,
+            file_list=file_list,
+            entry_code=entry_code,
+            problem_kernel_name=problem_kernel_name,
+            problem_kenrel_content=problem_kenrel_content
+        )
+        out = self.chat(prompt)
+        out = extract_json(out)
+        write_file(current_dir / "error_report.json",  json.dumps(out, indent=2))
+        return out
+    
 
-    def generate_init_error_report(self, root_dir: Path, current_dir: Path, debug_example: str, entry_code: str, ref_code: str):
+    def generate_debug_script(self, root_dir: Path, current_dir: Path, debug_example: str, entry_code: str, ref_code: str):
         tqdm.write("generate value debug script...")
         prompt = DEBUG_SCRIPT_TEMPLATE.substitute(
             debug_example = debug_example,

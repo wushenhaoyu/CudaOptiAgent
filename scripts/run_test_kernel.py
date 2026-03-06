@@ -50,6 +50,11 @@ def test_kernel(root_dir: Path, task_dir: Path, device_idx: int = 0):
 
     # ---------------- Crash detection ----------------
     if p.exitcode != 0 and not parent_conn.poll():
+        try:
+            parent_conn.close()
+        except Exception:
+            pass
+
         return {
             "runnable": False,
             "error_stage": "crash",
@@ -57,13 +62,20 @@ def test_kernel(root_dir: Path, task_dir: Path, device_idx: int = 0):
             "message": f"Subprocess exited with code {p.exitcode}",
         }
 
-    payload = parent_conn.recv() if parent_conn.poll() else None
+    # ---------------- Safe recv ----------------
+    payload = None
+    if parent_conn.poll():
+        try:
+            payload = parent_conn.recv()
+        except EOFError:
+            payload = None
 
     try:
         parent_conn.close()
     except Exception:
         pass
 
+    # ---------------- Parse payload ----------------
     if (
         isinstance(payload, tuple)
         and len(payload) == 2
@@ -78,7 +90,12 @@ def test_kernel(root_dir: Path, task_dir: Path, device_idx: int = 0):
             metrics = {"runnable": False}
             metrics.update(data)
     else:
-        metrics = {"runnable": False}
+        metrics = {
+            "runnable": False,
+            "error_stage": "crash",
+            "error_type": "pipe_failure",
+            "message": "No payload received from subprocess",
+        }
 
     return metrics
 
@@ -99,7 +116,7 @@ def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, con
             {
                 "error_stage": "param_align",
                 "error_type": "parameter_alignment_error",
-                "message": sanitize_torch_error(str(e))
+                "message": str(e)
             }
         ))
 
@@ -109,7 +126,7 @@ def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, con
             {
                 "error_stage": "build",
                 "error_type": "compilation_error",
-                "message": sanitize_torch_error(str(e))
+                "message": str(e)
             }
         ))
 
@@ -119,7 +136,7 @@ def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, con
             {
                 "error_stage": "numerical",
                 "error_type": "output_mismatch",
-                "message": sanitize_torch_error(str(e))
+                "message": str(e)
             }
         ))
 
@@ -129,7 +146,7 @@ def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, con
             {
                 "error_stage": "forward",
                 "error_type": "runtime_error",
-                "message": sanitize_torch_error(str(e))
+                "message": str(e)
             }
         ))
 
