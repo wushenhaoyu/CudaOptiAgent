@@ -8,6 +8,7 @@ from agent.role.coder import Coder
 from agent.role.validator import Validator
 from agent.role.planner import Planner
 
+from scripts.run_ncs_debug import run_ncs_debug
 from scripts.run_value_debug import run_model_debug
 from scripts.run_ncu import profile_with_ncu
 from utils.utils import  delete_folder, copy_folder, dict_to_text, list_all_files, load_show_files, read_file, remove_justification, text_to_dict, write_file, extract_recommendation
@@ -120,9 +121,27 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                 # cuda illegal memory
                 # -------------------------------------------------
                 if error_type == "cuda_illegal_memory":
-
                     print("⚠ CUDA illegal memory access detected.")
-                    break  
+                    ncs_msg = run_ncs_debug(
+                        task_root / "spec" / "entry.py",
+                        args.device,
+                        current_dir / "ncu_log.log"
+                    )
+                    msg['ncs_msg'] = ncs_msg
+                    if ncs_msg.get("errors"):
+                        first_error = ncs_msg["errors"][0]
+                        problem_kernel_name = first_error.get("kernel", "")
+                        problem_kernel_file = first_error.get("source", {}).get("file", "")
+
+                        error_report = validator.generate_error_report_(
+                            task_root,
+                            current_dir,
+                            str(msg),
+                            read_file(task_root / "spec" / "entry.py"),
+                            problem_kernel_name, 
+                            read_file(task_root / "spec" / "kernel" / problem_kernel_name),
+                        )
+
 
                 # -------------------------------------------------
                 # value error 

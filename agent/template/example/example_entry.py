@@ -19,6 +19,7 @@ cuda_extension = load(
     name=f"MLP_{content_hash}",
     sources=[kernel_path],
     verbose=False,
+    extra_cuda_cflags=["-O3","-lineinfo"]
 )
 
 # -----------------------------

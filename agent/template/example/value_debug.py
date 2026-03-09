@@ -15,7 +15,8 @@ with open(kernel_path, "rb") as f:
 cuda_extension = load(
     name=f"debug_{content_hash}",
     sources=[kernel_path],
-    verbose=False
+    verbose=False,
+    extra_cuda_cflags=["-O3","-lineinfo","-G"]
 )
 
 
