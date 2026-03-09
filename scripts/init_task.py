@@ -161,8 +161,8 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                     if debug_msg["runnable"]:
                         break
                     msg["debug_msg"] = debug_msg              
-                    kernel_report = debug_msg.get("kernel_report", [])
-                    problem_kernel_name = debug_msg.get("first_failing_kernel") + ".cu"
+                    kernel_report = debug_msg["kernel_report"]
+                    problem_kernel_name = debug_msg["first_failing_kernel"] + ".cu"
                     error_report = validator.generate_error_report_(
                         task_root,
                         current_dir,

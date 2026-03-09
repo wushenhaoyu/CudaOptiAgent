@@ -87,7 +87,7 @@ class Coder(LLM):
                               file_list: str, 
                               repair_file_list: list):
         tqdm.write("repair_init_cuda")
-        for file , i  in enumerate(repair_file_list):
+        for i , file  in enumerate(repair_file_list):
             target_file_name = file["file_name"]
             related_files = file["related_files"]
             related_files_content = load_related_files(related_files, str(root_dir / "spec"))

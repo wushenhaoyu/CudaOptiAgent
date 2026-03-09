@@ -5,41 +5,89 @@ import re
 import shutil
 import textwrap
 from typing import Any, Dict, List
-
-
 import re
-import os
-
-import re
-
-
-
 
 def sanitize_torch_error(err_msg: str) -> str:
-    """
-    Keep only the key exception message and signature for LLM input.
-    Drop long tracebacks and tensor content.
-    """
-    lines = err_msg.splitlines()
-    sanitized_lines = []
+    invoked_pattern = r'(Invoked with:)(.*?)(?=\n\n|\Z)'
+    invoked_match = re.search(invoked_pattern, err_msg, re.DOTALL)
 
-    # Search backwards for the last exception type line
-    for line in reversed(lines):
-        if re.match(r"^\w+Error: ", line):
-            sanitized_lines.append(line)
-            break
-        if "incompatible function arguments" in line:
-            sanitized_lines.append(line)
+    if not invoked_match:
+        return err_msg[:5000]
 
-    # Search for 'Invoked with:' and sanitize tensors
-    for line in lines:
-        if "Invoked with:" in line:
-            args_str = line.split("Invoked with:")[1].strip()
-            args_sanitized = re.sub(r'tensor\([^\)]*\)', '<tensor>', args_str)
-            sanitized_lines.append(f"Invoked with: {args_sanitized}")
-            break
+    prefix = invoked_match.group(1)
+    args_block = invoked_match.group(2)
 
-    return "\n".join(sanitized_lines)
+    compressed_args = _compress_first_tensor_only(args_block)
+    compressed_args = " ".join(compressed_args.split())
+
+    before_invoked = err_msg[:invoked_match.start()]
+    before_invoked = _compress_first_tensor_only(before_invoked)
+
+    result = before_invoked + prefix + " " + compressed_args
+
+    return result
+
+
+def _compress_first_tensor_only(text: str) -> str:
+    result = []
+    i = 0
+    n = len(text)
+    tensor_found = False
+
+    while i < n:
+        if not tensor_found and text[i:i+7] == "tensor(":
+            start = i
+            depth = 1
+            i += 7
+
+            while i < n and depth > 0:
+                if text[i] == '(':
+                    depth += 1
+                elif text[i] == ')':
+                    depth -= 1
+                i += 1
+
+            tensor_str = text[start:i]
+            compressed = _compress_single_tensor(tensor_str)
+            result.append(compressed)
+            tensor_found = True
+        else:
+            result.append(text[i])
+            i += 1
+
+    return "".join(result)
+
+
+def _compress_single_tensor(tensor_str: str) -> str:
+    props = []
+
+    device_m = re.search(r"device=['\"']([^'\"]+)['\"']", tensor_str)
+    if device_m:
+        props.append(f"device={device_m.group(1)}")
+
+    dtype_m = re.search(r"dtype=([a-zA-Z0-9_]+)", tensor_str)
+    if dtype_m:
+        props.append(f"dtype={dtype_m.group(1)}")
+
+    content_start = tensor_str.find('[')
+    if content_start != -1:
+        bracket_count = 0
+        for c in tensor_str[content_start:]:
+            if c == '[':
+                bracket_count += 1
+            elif c == ']':
+                break
+        if bracket_count > 0:
+            props.append(f"ndim={bracket_count}")
+
+    if "requires_grad=True" in tensor_str:
+        props.append("requires_grad=True")
+
+    props_str = " ".join(props)
+    if props_str:
+        return f"<tensor {props_str}>"
+    else:
+        return "<tensor>"
 
 
 def load_related_files(related_files, project_root):

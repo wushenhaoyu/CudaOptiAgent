@@ -114,7 +114,6 @@ def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, con
         conn.send((
             "err",
             {
-                "error_stage": "param_align",
                 "error_type": "parameter_alignment_error",
                 "message": str(e)
             }
@@ -124,7 +123,6 @@ def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, con
         conn.send((
             "err",
             {
-                "error_stage": "build",
                 "error_type": "compilation_error",
                 "message": str(e)
             }
@@ -134,7 +132,6 @@ def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, con
         conn.send((
             "err",
             {
-                "error_stage": "numerical",
                 "error_type": "output_mismatch",
                 "message": str(e)
             }
@@ -144,7 +141,6 @@ def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, con
         conn.send((
             "err",
             {
-                "error_stage": "forward",
                 "error_type": "runtime_error",
                 "message": str(e)
             }
@@ -155,7 +151,6 @@ def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, con
         conn.send((
             "err",
             {
-                "error_stage": "unknown",
                 "error_type": "unknown_error",
                 "message": sanitize_torch_error(_tb.format_exc())
             }
