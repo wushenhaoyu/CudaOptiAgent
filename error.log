@@ -1,4 +1,5 @@
-avgpool3d_plus_gelu_epilogue(): incompatible function arguments. The following argument types are supported:
-    1. (arg0: torch.Tensor, arg1: collections.abc.Sequence[typing.SupportsInt], arg2: collections.abc.Sequence[typing.SupportsInt], arg3: collections.abc.Sequence[typing.SupportsInt], arg4: bool, arg5: bool, arg6: typing.SupportsInt | None) -> torch.Tensor
-
-Invoked with: <tensor ndim=5>
+CUDA error: an illegal memory access was encountered
+Search for `cudaErrorIllegalAddress' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.

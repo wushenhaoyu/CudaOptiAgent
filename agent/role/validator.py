@@ -41,7 +41,7 @@ class Validator(LLM):
         write_file(current_dir / "error_report.json",  json.dumps(out, indent=2))
         return out
     
-    def generate_error_report_(self,  root_dir: Path, current_dir: Path, error_message:str, task_description: str, file_list: str, entry_code: str ,problem_kernel_name: str, problem_kenrel_content: str):
+    def generate_error_report_(self,  root_dir: Path, current_dir: Path, error_message:str, task_description: str, file_list: str, entry_code: str ,problem_kernel_name: str, problem_kernel_content: str):
         tqdm.write("generate_init_error_report")
         prompt = GENERATE_ERROR_REPORT_TEMPLATE_NO_CONTENT.substitute(
             error_message=error_message,
@@ -49,7 +49,7 @@ class Validator(LLM):
             file_list=file_list,
             entry_code=entry_code,
             problem_kernel_name=problem_kernel_name,
-            problem_kenrel_content=problem_kenrel_content
+            problem_kernel_content=problem_kernel_content
         )
         out = self.chat(prompt)
         out = extract_json(out)

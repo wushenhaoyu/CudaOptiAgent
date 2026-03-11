@@ -1,0 +1,28 @@
+{
+  "success": false,
+  "summary": {
+    "total_matches": 100,
+    "unique_errors": 1,
+    "by_type": {
+      "MEMORY_INVALID": 1
+    },
+    "by_kernel": {
+      "qk_gemm_with_scale_and_mask_epilogue_kernel(con...": 1
+    }
+  },
+  "errors": [
+    {
+      "type": "MEMORY_INVALID",
+      "subtype": "__global__ read",
+      "size_bytes": 4,
+      "kernel": "qk_gemm_with_scale_and_mask_epilogue_kernel(const float *, const float *, const float *, float *, int, int, int, int)",
+      "thread": "160,0,0",
+      "block": "11285,0,0",
+      "fault_addr": "0x14de52005680",
+      "offset": 22145,
+      "alloc_addr": "0x14de50c00000",
+      "alloc_size": 20971520,
+      "count": 100
+    }
+  ]
+}

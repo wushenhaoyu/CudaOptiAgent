@@ -32,7 +32,7 @@ You must:
 - Variable names in __init__ must match $source_code exactly for param alignment
 - Generate one CUDA function per fusion group/operator
 - Forward must call the corresponding CUDA functions in order, reusing the same kernel for repeated operators if indicated
-                                     
+                                                                        
 Output Requirements:
 - Generate the complete Python code for the ModelNew class
 - Forward should sequentially invoke the CUDA kernels from $fusion_plan

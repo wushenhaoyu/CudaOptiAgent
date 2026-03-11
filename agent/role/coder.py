@@ -97,12 +97,12 @@ class Coder(LLM):
                 file_list=file_list,
                 target_file_name=target_file_name,
                 target_file_content=target_file_content,
-                related_files_content=related_files_content,
+                related_files_content=str(related_files_content),
                 error_items=error_items
             )
             write_file(current_dir / f"coder_io_{i}.txt", f"Input Prompt:\n{prompt}\n")
             out = strip_fence(self.chat(prompt))
-            write_file(current_dir / "spec" / target_file_name, out)
+            write_file(root_dir / "spec" / target_file_name, out)
 
 
 

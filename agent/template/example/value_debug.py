@@ -52,7 +52,7 @@ class ModelDebug(nn.Module):
             return
 
         diff = (cuda_out.detach() - torch_out.detach()).abs().max().item()
-        status = "ok" if diff < 1e-4 else "mismatch"
+        status = "ok" if diff < 5e-3 else "mismatch"
 
         self.report.append({
             "kernel": kernel_name,

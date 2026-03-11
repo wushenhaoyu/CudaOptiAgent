@@ -11,12 +11,12 @@ Your task is:
 5. For numerical mismatch errors or difficult-to-observe issues (like CUDA illegal memory access), do NOT provide file content; instead, note the error type and suggest further breakpoint or sanitizer analysis.
 
 Error Types:
-- value_error
-- cuda_illegal_memory
-- cuda_device_assert
-- parameter_alignment_error
-- compilation_error
-- unknown_error
+- value_error  #The results do not match the torch inference 
+- cuda_illegal_memory 
+- cuda_device_assert 
+- parameter_alignment_error #The weights of the entry file model and the ref file model cannot be completely copied
+- compilation_error 
+- unknown_error #Any error that can determine the location
 
 Input:
 - Error message: $error_message
@@ -29,7 +29,7 @@ Output JSON format:
   "most_likely_error_file": "<path to file where error most likely occurs>",
   "error_type": "<error type>",
   "explain_reasoning": "<brief reasoning why the error occurs here>",
-  "show_files": [  # Only include if error is obvious; omit otherwise
+  "show_files": [  # Provide context for subsequent fixes, it can only be hidden for value_error, cuda_illegal_memor, or cuda_device_assert
     {
       "file_path": "<file path to display>"
     }

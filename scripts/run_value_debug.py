@@ -67,15 +67,13 @@ def run_model_debug_process(script_path: Path, device_idx: int, conn):
             device_idx,
         )
 
-        # ---------------- 所有 kernel OK ----------------
         if first_kernel is None:
 
             conn.send((
                 "ok",
-                {}   # 不返回 report
+                {}   
             ))
 
-        # ---------------- 存在 kernel mismatch ----------------
         else:
 
             conn.send((

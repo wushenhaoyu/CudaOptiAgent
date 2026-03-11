@@ -11,7 +11,7 @@ def run_script(script_path, device_idx=0):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
 
-    Model = getattr(mod, "Model", None)
+    Model = getattr(mod, "ModelNew", None)
     get_inputs = getattr(mod, "get_inputs", None)
     get_init_inputs = getattr(mod, "get_init_inputs", None)
 
@@ -49,6 +49,7 @@ def run_script(script_path, device_idx=0):
 if __name__ == "__main__":
 
     script = sys.argv[1]
+    print(script)
     device = int(sys.argv[2]) if len(sys.argv) > 2 else 0
-
+    print(device)
     run_script(script, device)

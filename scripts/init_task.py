@@ -11,7 +11,7 @@ from agent.role.planner import Planner
 from scripts.run_ncs_debug import run_ncs_debug
 from scripts.run_value_debug import run_model_debug
 from scripts.run_ncu import profile_with_ncu
-from utils.utils import  delete_folder, copy_folder, dict_to_text, list_all_files, load_show_files, read_file, remove_justification, text_to_dict, write_file, extract_recommendation
+from utils.utils import  delete_folder, copy_folder, dict_to_text, find_best_match, list_all_files, load_show_files, read_file, remove_justification, text_to_dict, write_file, extract_recommendation
 from scripts.run_test_kernel import test_kernel
 
 
@@ -127,20 +127,24 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                         args.device,
                         current_dir / "ncu_log.log"
                     )
-                    msg['ncs_msg'] = ncs_msg
-                    if ncs_msg.get("errors"):
-                        first_error = ncs_msg["errors"][0]
-                        problem_kernel_name = first_error.get("kernel", "")
-                        problem_kernel_file = first_error.get("source", {}).get("file", "")
+                    msg['ncs_msg'] = ncs_msg['parsed']
+                    if not msg['ncs_msg']["success"]:
+                        first_error = msg['ncs_msg']["errors"][0]
+                        problem_kernel = first_error["kernel"]
+                        #problem_kernel_file = first_error.get("source", {}).get("file", "")
+                        problem_kernel_name = find_best_match(problem_kernel,list_all_files(task_root / "spec"))
 
                         error_report = validator.generate_error_report_(
                             task_root,
                             current_dir,
                             str(msg),
+                            task_description,
+                            list_all_files(task_root / "spec"),
                             read_file(task_root / "spec" / "entry.py"),
                             problem_kernel_name, 
-                            read_file(task_root / "spec" / "kernel" / problem_kernel_name),
+                            read_file(task_root / "spec" / problem_kernel_name),
                         )
+                    break
 
 
                 # -------------------------------------------------
@@ -158,19 +162,26 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                             read_file(task_root / "spec" / "ref.py")
                         )
                     debug_msg = run_model_debug(task_root / "spec" / "value_debug.py",args.device)
+                    write_file(current_dir / "result_debug.log", dict_to_text(debug_msg))
                     if debug_msg["runnable"]:
                         break
                     msg["debug_msg"] = debug_msg              
-                    kernel_report = debug_msg["kernel_report"]
-                    problem_kernel_name = debug_msg["first_failing_kernel"] + ".cu"
-                    error_report = validator.generate_error_report_(
-                        task_root,
-                        current_dir,
-                        str(msg),
-                        read_file(task_root / "spec" / "entry.py"),
-                        problem_kernel_name, 
-                        read_file(task_root / "spec" / "kernel" / problem_kernel_name),
-                    )
+                    kernel_reports = debug_msg["kernel_report"]
+                    for kernel_report in kernel_reports:
+                        if kernel_report['status'] != "ok":
+                            problem_kernel_name = kernel_report["kernel"] + ".cu"
+                            error_report = validator.generate_error_report_(
+                                task_root,
+                                current_dir,
+                                str(msg),
+                                task_description,
+                                str(list_all_files(task_root / "spec")),
+                                read_file(task_root / "spec" / "entry.py"),
+                                problem_kernel_name, 
+                                read_file(task_root / "spec" / "kernel" / problem_kernel_name),
+                            )
+                            break
+                    break
                     
                 else:
                     print("⚠ error detected.")

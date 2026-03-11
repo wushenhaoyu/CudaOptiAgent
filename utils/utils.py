@@ -1,93 +1,80 @@
+import difflib
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import textwrap
 from typing import Any, Dict, List
-import re
-
-def sanitize_torch_error(err_msg: str) -> str:
-    invoked_pattern = r'(Invoked with:)(.*?)(?=\n\n|\Z)'
-    invoked_match = re.search(invoked_pattern, err_msg, re.DOTALL)
-
-    if not invoked_match:
-        return err_msg[:5000]
-
-    prefix = invoked_match.group(1)
-    args_block = invoked_match.group(2)
-
-    compressed_args = _compress_first_tensor_only(args_block)
-    compressed_args = " ".join(compressed_args.split())
-
-    before_invoked = err_msg[:invoked_match.start()]
-    before_invoked = _compress_first_tensor_only(before_invoked)
-
-    result = before_invoked + prefix + " " + compressed_args
-
-    return result
+from pathlib import Path
 
 
-def _compress_first_tensor_only(text: str) -> str:
-    result = []
-    i = 0
-    n = len(text)
-    tensor_found = False
+def find_best_match(kernel_name, cu_files):
+    base = kernel_name.replace("_kernel", "")
+    names = [f.replace(".cu", "") for f in cu_files]
 
-    while i < n:
-        if not tensor_found and text[i:i+7] == "tensor(":
-            start = i
-            depth = 1
-            i += 7
+    match = difflib.get_close_matches(base, names, n=1, cutoff=0.1)
 
-            while i < n and depth > 0:
-                if text[i] == '(':
-                    depth += 1
-                elif text[i] == ')':
-                    depth -= 1
-                i += 1
-
-            tensor_str = text[start:i]
-            compressed = _compress_single_tensor(tensor_str)
-            result.append(compressed)
-            tensor_found = True
-        else:
-            result.append(text[i])
-            i += 1
-
-    return "".join(result)
+    if match:
+        return match[0] + ".cu"
+    return None
 
 
-def _compress_single_tensor(tensor_str: str) -> str:
-    props = []
+def sanitize_torch_error(text: str) -> str:
+    marker = "Invoked with:"
+    pos = text.find(marker)
+    if pos == -1:
+        return text
 
-    device_m = re.search(r"device=['\"']([^'\"]+)['\"']", tensor_str)
-    if device_m:
-        props.append(f"device={device_m.group(1)}")
+    prefix = text[:pos + len(marker)]
+    args_part = text[pos + len(marker):]
 
-    dtype_m = re.search(r"dtype=([a-zA-Z0-9_]+)", tensor_str)
-    if dtype_m:
-        props.append(f"dtype={dtype_m.group(1)}")
 
-    content_start = tensor_str.find('[')
-    if content_start != -1:
-        bracket_count = 0
-        for c in tensor_str[content_start:]:
+    args_part = " ".join(args_part.split())
+
+    args = []
+    current = []
+    depth = 0
+
+    for c in args_part:
+        if c == ',' and depth == 0:
+            args.append("".join(current).strip())
+            current = []
+            continue
+
+        current.append(c)
+
+        if c in "([": 
+            depth += 1
+        elif c in ")]":
+            depth -= 1
+
+    if current:
+        args.append("".join(current).strip())
+
+    def compress_tensor(arg: str):
+        if not arg.startswith("tensor("):
+            return arg
+
+        m = re.search(r"\[(.*)\]", arg)
+        if not m:
+            return "tensor(?)"
+
+        content = m.group(0)
+
+        dim = 0
+        for c in content:
             if c == '[':
-                bracket_count += 1
-            elif c == ']':
+                dim += 1
+            else:
                 break
-        if bracket_count > 0:
-            props.append(f"ndim={bracket_count}")
 
-    if "requires_grad=True" in tensor_str:
-        props.append("requires_grad=True")
+        return f"tensor({dim}D)"
 
-    props_str = " ".join(props)
-    if props_str:
-        return f"<tensor {props_str}>"
-    else:
-        return "<tensor>"
+    args = [compress_tensor(a) for a in args]
+
+    return prefix + " " + ", ".join(args)
+
+
 
 
 def load_related_files(related_files, project_root):
