@@ -90,13 +90,6 @@ INPUTS:
 - Python entry code passes raw device pointers and sizes
 - Fusion plan is provided as JSON in $fusion_plan
 
-OUTPUT:
-- Multiple `.cu` files, one per fusion group
-- One `kernel.cu` file including all fusion groups and registering the Python module
-- Each fusion group must have:
-    - __global__ kernel
-    - Python wrapper via pybind11
-
 # Source code for reference:
 ```python
 $source_code
@@ -105,6 +98,11 @@ $entry_code
 Fusion Plan:
 $fusion_plan
 Output Format Instructions:
+- Multiple `.cu` files, one per fusion group
+- One `kernel.cu` file including all fusion groups and registering the Python module
+- Each fusion group must have:
+    - __global__ kernel
+    - Python wrapper via pybind11
 
 Do NOT include explanations or comments outside code
 

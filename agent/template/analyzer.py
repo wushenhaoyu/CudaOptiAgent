@@ -31,7 +31,7 @@ OUTPUT FORMAT:
     }
   ]
 }
-
+```
 ANALYZE THIS INFERENCE MODEL:
 $source_code
 """)

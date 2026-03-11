@@ -47,14 +47,14 @@ class Validator(LLM):
             error_message=error_message,
             task_description=task_description,
             file_list=file_list,
-            entry_code=entry_code,
+            #entry_code=entry_code,
             problem_kernel_name=problem_kernel_name,
             problem_kernel_content=problem_kernel_content
         )
         out = self.chat(prompt)
-        out = extract_json(out)
-        write_file(current_dir / "error_report.json",  json.dumps(out, indent=2))
-        return out
+        output = extract_json(out)
+        write_file(current_dir / "error_report.json",  json.dumps(output, indent=2))
+        return output
     
 
     def generate_debug_script(self, root_dir: Path, current_dir: Path, debug_example: str, entry_code: str, ref_code: str):

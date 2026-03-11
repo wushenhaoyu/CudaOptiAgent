@@ -1,3 +1,4 @@
+import ast
 import difflib
 import json
 import os
@@ -379,6 +380,25 @@ def write_file(file_path: str, content: str, encoding: str = "utf-8") -> bool:
         return False
     
 def extract_json(text: str) -> dict:
+    text_stripped = text.strip()
+    
+    # Unwrap Python string literal if present
+    if (text_stripped.startswith("'") and text_stripped.endswith("'")) or \
+       (text_stripped.startswith('"') and text_stripped.endswith('"')):
+        try:
+            text = ast.literal_eval(text_stripped)
+        except (ValueError, SyntaxError):
+            pass  
+    
+    # If it's already a JSON object string, parse directly
+    text_stripped = text.strip()
+    if text_stripped.startswith('{') and text_stripped.endswith('}'):
+        try:
+            return json.loads(text_stripped)
+        except json.JSONDecodeError:
+            pass
+    
+    # Try code blocks
     patterns = [
         r'```json\s*(\{.*?\})\s*```',
         r'```\s*(\{.*?\})\s*```',
@@ -392,24 +412,15 @@ def extract_json(text: str) -> dict:
                 return json.loads(cleaned)
             except json.JSONDecodeError:
                 continue
+    
+    # Fallback: extract first balanced braces (ignoring string contents is hard, 
+    # so we just try parsing from first '{' to last '}')
     try:
         start = text.find('{')
-        if start == -1:
-            return {}
-        count = 0
-        end = start
-        for i, char in enumerate(text[start:], start=start):
-            if char == '{':
-                count += 1
-            elif char == '}':
-                count -= 1
-                if count == 0:
-                    end = i + 1
-                    break
-        
-        if count == 0:
-            return json.loads(text[start:end])
-    except (json.JSONDecodeError, ValueError):
+        end = text.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            return json.loads(text[start:end+1])
+    except json.JSONDecodeError:
         pass
     
     return {}

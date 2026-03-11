@@ -132,7 +132,7 @@ def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, con
         conn.send((
             "err",
             {
-                "error_type": "output_mismatch",
+                "error_type": "value_error",
                 "message": str(e)
             }
         ))

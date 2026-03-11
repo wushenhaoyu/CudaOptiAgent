@@ -25,6 +25,7 @@ $file_list
 - Task description: $task_description
 
 Output JSON format:
+```json
 {
   "most_likely_error_file": "<path to file where error most likely occurs>",
   "error_type": "<error type>",
@@ -35,7 +36,7 @@ Output JSON format:
     }
   ]
 }
-
+```
 Constraints:
 - The 'show_files' field should only include files when the error is obvious to locate and the content is helpful for generating a subsequent detailed error report.
 - If the error is numerical or memory-related, do not include 'show_files'.
@@ -62,10 +63,10 @@ $error_message
 $task_description
 
 - Available files:
-(entry.py is the Python entry code,
+entry.py is the Python entry code,
 kernel.cu contains CUDA kernels and pybind bindings,
-ref.py is the original PyTorch reference implementation,
-there may be additional .cu/.h files inside the kernel directory)
+ref.py is the original PyTorch reference implementation (read only),
+there may be additional .cu/.h files inside the kernel directory
 $file_list
 
 - Selected files with content:
@@ -73,7 +74,7 @@ $selected_files_content
 
 
 Output strictly in the following JSON format:
-
+```json
 {
   "files": [
     {
@@ -92,7 +93,7 @@ Output strictly in the following JSON format:
     }
   ]
 }
-
+```
 Rules:
 
 - Each file must appear only once.
@@ -131,17 +132,13 @@ ref.py is the original PyTorch reference implementation,
 there may be additional .cu/.h files inside the kernel directory)
 $file_list
 
-entry.py:
-```python
-                                                     
-``` \n
 $problem_kernel_name:
 ```cuda
 $problem_kernel_content
 ```\n
 
 Output strictly in the following JSON format:
-
+```json
 {
   "files": [
     {
@@ -160,7 +157,7 @@ Output strictly in the following JSON format:
     }
   ]
 }
-
+```
 Rules:
 
 - Each file must appear only once.

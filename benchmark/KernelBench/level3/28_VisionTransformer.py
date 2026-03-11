@@ -31,7 +31,7 @@ class Model(nn.Module):
         self.dropout = nn.Dropout(emb_dropout)
         
         self.transformer = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(d_model=dim, nhead=heads, dim_feedforward=mlp_dim, dropout=dropout),
+            nn.TransformerEncoderLayer(d_model=dim, nhead=heads, dim_feedforward=mlp_dim, dropout=dropout, batch_first=True),
             num_layers=depth
         )
         
