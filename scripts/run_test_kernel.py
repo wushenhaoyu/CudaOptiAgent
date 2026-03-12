@@ -132,27 +132,32 @@ def test_kernel_process(root_dir: Path, task_dir: Path, device_idx: int = 0, con
         conn.send((
             "err",
             {
-                "error_type": "value_error",
+                "error_type": "result_error",
                 "message": str(e)
             }
         ))
 
     except RuntimeError as e:
+        import traceback as _tb
+        tb_str = _tb.format_exc()
         conn.send((
             "err",
             {
                 "error_type": "runtime_error",
-                "message": str(e)
+                "message": str(e),
+                "traceback": tb_str
             }
         ))
 
     except Exception as e:
         import traceback as _tb
+        tb_str = _tb.format_exc()
         conn.send((
             "err",
             {
                 "error_type": "unknown_error",
-                "message": sanitize_torch_error(_tb.format_exc())
+                "message": sanitize_torch_error(_tb.format_exc()),
+                "traceback": tb_str
             }
         ))
 

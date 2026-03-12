@@ -3,36 +3,44 @@ from string import Template
 
 FUSE_ANALYZER_BASE_TEMPLATE = Template("""
 You are a CUDA Kernel Architect specialized in INFERENCE-ONLY optimization.
-Goal: Partition the graph into "Safe-Aggressive" fusion groups for naive CUDA kernels.
+Goal: Partition the PyTorch graph into "Safe-Aggressive" fusion groups and provide a high-level kernel implementation blueprint.
 
-Rules for fusion analysis:
+Core Rules for Fusion Analysis:
 
-1. One Kernel, One Pattern: Maintain single parallel pattern (GEMM, Conv, Reduction, or Elementwise).
-2. Max One Heavy Op: Only ONE Heavy Op (GEMM/Conv/Large Reduction) per kernel. Fuse elementwise ops (Bias, ReLU) as epilogue.
-3. No Cross-Block Sync: If Op B requires full output of Op A across blocks (e.g., Softmax denominator), SPLIT.
-4. Memory Access Safety: SPLIT if memory access patterns mismatch (e.g., Sequential Write vs. Strided Read, NCHW vs. NHWC). Naive kernels cannot reorder memory mid-flight.
-5. Ignore Training Ops: Dropout etc. are NO-OPs. Remove from graph.
-6. Identify repeated operator sequences (e.g., Conv → ReLU → BatchNorm) and **create a single fusion template per unique sequence**.  
-   - Mark repeated sequences to indicate they can reuse the same CUDA kernel template.  
-   - List all occurrences of the sequence in the model for reference.
+1. Maintain a single dominant parallel pattern per kernel (GEMM, Conv, Reduction, Elementwise).
+2. Only one heavy operator per kernel (GEMM/Conv/Large Reduction). Fuse elementwise ops (Bias, ReLU) as epilogue.
+3. Avoid cross-block synchronization dependencies (e.g., Softmax denominator requiring full reduction).
+4. Maintain compatible memory access patterns (do not fuse ops with incompatible layouts or access orders).
+5. Ignore training-only operators such as Dropout.
 
 OUTPUT FORMAT:
 ```json
 {
-  "task_description": "<A concise summary of the task, e.g., 'Image classification using ResNet-like Conv/BN/ReLU blocks'>",
+  "task_description": "<A concise summary of the model and inference task>",
   "fusion_groups": [
     {
-      "group_id": 0,
-      "kernel_name": "...",
-      "operators": ["Conv2d", "ReLU", "BatchNorm"],
+      "kernel_id": 0,
+      "kernel_name": "<name for kernel>",
+      "operators": ["Conv2d","BatchNorm","ReLU"],
       "dominant_pattern": "Convolution",
       "fusion_type": "Heavy+Epilogue | Standalone Heavy | Standalone Reduction | Pure Elementwise",
-      "justification": "Explain physical safety. MUST mention memory access compatibility (e.g., 'Coalesced access maintained')."
+      
+      "implementation_hint": {
+        "parallel_structure": "<e.g., 1 output element per thread, grid-stride loop over batch>",
+        "compute_flow": [
+            "<stepwise computation, e.g., load input tile, compute conv, apply batchnorm, apply relu>"
+        ],
+        "memory_notes": [
+            "<coalesced accesses, weights reuse, shared memory hints>"
+        ]
+      },
+      "justification": "Explain memory access safety, parallelism considerations, and fusion decisions."
     }
   ]
 }
 ```
-ANALYZE THIS INFERENCE MODEL:
+
+ANALYZE THE FOLLOWING INFERENCE MODEL:
 $source_code
 """)
 

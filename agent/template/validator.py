@@ -11,7 +11,7 @@ Your task is:
 5. For numerical mismatch errors or difficult-to-observe issues (like CUDA illegal memory access), do NOT provide file content; instead, note the error type and suggest further breakpoint or sanitizer analysis.
 
 Error Types:
-- value_error  #The results do not match the torch inference 
+- result_error  #The results do not match the torch inference 
 - cuda_illegal_memory 
 - cuda_device_assert 
 - parameter_alignment_error #The weights of the entry file model and the ref file model cannot be completely copied

@@ -230,6 +230,9 @@ def delete_folder(folder_path, delete_self=True):
 
 
 
+import os
+import re
+
 def save_cuda_files_clean(api_output: str, output_dir: str = "./cuda_kernels"):
     os.makedirs(output_dir, exist_ok=True)
 
@@ -237,23 +240,27 @@ def save_cuda_files_clean(api_output: str, output_dir: str = "./cuda_kernels"):
     clean_output = re.sub(r'```', '', clean_output)
     clean_output = clean_output.strip()
 
-    pattern = re.compile(r'// (\S+\.cu)\n(.*?)(?=(// \S+\.cu|\Z))', re.DOTALL)
-    matches = pattern.findall(clean_output)
+    file_pattern = re.compile(r'^//.*?([\w\-_]+\.cu)', re.IGNORECASE | re.MULTILINE)
+    matches = list(file_pattern.finditer(clean_output))
 
     saved_files = []
 
-    for filename, content, _ in matches:
+    if not matches:
+        print("No CUDA files found in the API output.")
+        return saved_files
+
+    for i, match in enumerate(matches):
+        filename = match.group(1).strip()
+        start_idx = match.end() 
+        end_idx = matches[i + 1].start() if i + 1 < len(matches) else len(clean_output)
+        content = clean_output[start_idx:end_idx].strip()
+
         path = os.path.join(output_dir, filename)
         with open(path, 'w', encoding='utf-8') as f:
-            f.write(content.strip() + '\n')
+            f.write(content + '\n')
         saved_files.append(filename)
-        #print(f"Saved {filename}")
-
-    if not saved_files:
-        print("No CUDA files found in the API output.")
 
     return saved_files
-
 def remove_justification(data: Any) -> Any:
 
     if isinstance(data, str):

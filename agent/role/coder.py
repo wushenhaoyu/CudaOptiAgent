@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict
 from agent.llm import LLM
 from agent.settings import Coder_settings
-from agent.template.coder import INIT_ENTRY_CODER_TEMPLATE, INIT_CUDA_CODER_TEMPLATE, REPAIR_CUDA_CODER_TEMPLATE, REPAIR_ENTRY_CODER_TEMPLATE
+from agent.template.coder import INIT_ENTRY_CODER_TEMPLATE, INIT_CUDA_CODER_TEMPLATE, REPAIR_CUDA_CODER_TEMPLATE
 from utils.utils import load_related_files, save_cuda_files_clean, strip_fence, write_file, read_file
 
 
@@ -32,16 +32,6 @@ class Coder(LLM):
 
         write_file(root_dir / "spec" / "entry.py", entry_code)
 
-    def repair_entry_code(self, root_dir: Path ,source_code: str, cuda_module_name: str, cuda_function_name: str, kernel_dir: str, entry_code: str, error_report: str):
-        tqdm.write("repair_entry_code")
-        prompt = REPAIR_ENTRY_CODER_TEMPLATE.substitute(
-            source_code=source_code,
-            cuda_module_name=cuda_module_name,
-            cuda_function_name=cuda_function_name,
-            kernel_dir=kernel_dir,
-            entry_code=entry_code,
-            error_report=error_report
-        )
 
         entry_code = strip_fence(self.chat(prompt))
 
