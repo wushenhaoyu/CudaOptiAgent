@@ -63,31 +63,49 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
         impl_report  = None
         msg = None
         bootstrap_final = task_root / "bootstrap" / "kernel.cu"
+        
+        
         kernel_iter = 0
-
-        # Check for resume state
-        resume_file = task_root / "bootstrap" / "resume_state.json"
-        if resume_file.exists():
-            resume_state = json.loads(read_file(resume_file))
-            kernel_iter = resume_state.get("kernel_iter", 0)
-            print(f"Resuming from iteration {kernel_iter}")
-            # error_report is no longer loaded from resume_state
-
+        
+        
+        max_iter = -1
+        for item in bootstrap.iterdir():
+            if item.is_dir() and item.name.startswith("iter_"):
+                try:
+                    iter_num = int(item.name.split("_")[1])
+                    max_iter = max(max_iter, iter_num)
+                except (ValueError, IndexError):
+                    continue
+        
+        if max_iter >= 0:
+            
+            last_iter_dir = bootstrap / f"iter_{max_iter}"
+            error_report_file = last_iter_dir / "error_report.json"
+            
+            if error_report_file.exists():
+               
+                kernel_iter = max_iter + 1
+                print(f"Resuming: found error_report in iter_{max_iter}, starting from iter_{kernel_iter}")
+            else:
+                result_file = last_iter_dir / "result.json"
+                if result_file.exists():
+                    result = json.loads(read_file(result_file))
+                    if result.get("runnable", False):
+                        print(f"Task already completed successfully at iter_{max_iter}")
+                        continue
+                    else:
+                        kernel_iter = max_iter
+                        print(f"Resuming: iter_{max_iter} has result but not passed, retrying")
+                else:
+                    kernel_iter = max_iter
+                    print(f"Resuming: no result in iter_{max_iter}, starting from there")
+        
         while kernel_iter < args.bootstrap_iter:
 
             print(f"\n=== Kernel Iteration {kernel_iter} ===")
 
             current_dir = bootstrap / f"iter_{kernel_iter}"
             current_dir.mkdir(parents=True, exist_ok=True)
-
-            # Save resume state at start of iteration
-            resume_state = {
-                "kernel_iter": kernel_iter,
-                "task_name": task_name,
-                "phase": "bootstrap"
-            }
-            # error_report is not saved in resume_state anymore
-            write_file(resume_file, json.dumps(resume_state, indent=2))
 
             # Load error_report from previous iteration if kernel_iter > 0
             error_report = None
@@ -112,7 +130,7 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                     )
                     copy_folder(current_dir / "kernel", task_root / "spec" / "kernel")
             else:
-                # error_report is now loaded from previous iter, not from resume_state
+                # error_report is now loaded from previous iter
                 if error_report:
                     repair_file_list = error_report["files"]
                     if not (current_dir / "kernel").exists():
@@ -167,11 +185,6 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                 msg["most_likely_error_file"] = most_likely_error_file 
                 msg["error_type"] = error_type
                 
-                # Update resume state with error info (but not error_report itself)
-                resume_state["last_error_type"] = error_type
-                resume_state["last_error_file"] = most_likely_error_file
-                write_file(resume_file, json.dumps(resume_state, indent=2))
-                
                 # -------------------------------------------------
                 # cuda illegal memory
                 # -------------------------------------------------
@@ -213,18 +226,13 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                                 read_file(task_root / "spec" / problem_kernel_name),
                             )
                             write_file(error_report_file, json.dumps(error_report, indent=2))
-                        
-                        # Update resume state - error_report stays in its own file, not in resume
-                        resume_state["has_error_report"] = True
-                        resume_state["error_report_iter"] = kernel_iter
-                        write_file(resume_file, json.dumps(resume_state, indent=2))
                     break
 
 
                 # -------------------------------------------------
                 # value error 
                 # -------------------------------------------------
-                elif error_type == "value_error":
+                elif error_type == "result_error":
                     print("Output mismatch detected.")
                     debug_script = task_root / "spec" / "value_debug.py"
                     
@@ -271,11 +279,6 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                                     read_file(task_root / "spec" / "kernel" / problem_kernel_name),
                                 )
                                 write_file(error_report_file, json.dumps(error_report, indent=2))
-                            
-                            # Update resume state
-                            resume_state["has_error_report"] = True
-                            resume_state["error_report_iter"] = kernel_iter
-                            write_file(resume_file, json.dumps(resume_state, indent=2))
                             break
                     break
                     
@@ -296,24 +299,15 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                             load_show_files(show_files)
                         )
                         write_file(error_report_file, json.dumps(error_report, indent=2))
-                    
-                    # Update resume state
-                    resume_state["has_error_report"] = True
-                    resume_state["error_report_iter"] = kernel_iter
-                    write_file(resume_file, json.dumps(resume_state, indent=2))
                     break
 
             if test_passed:
-                # Clean up resume file on success
-                if resume_file.exists():
-                    resume_file.unlink()
                 break
 
             kernel_iter += 1
             
-            # Update resume state for next iteration
-            resume_state["kernel_iter"] = kernel_iter
-            write_file(resume_file, json.dumps(resume_state, indent=2))
+#=========================================== Opti =====================================
+        pass
             
 #=========================================== Opti =====================================
         pass
@@ -452,7 +446,7 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
 #                # -------------------------------------------------
 #                # value error 
 #                # -------------------------------------------------
-#                elif error_type == "value_error":
+#                elif error_type == "result_error":
 #                    print("⚠ Output mismatch detected.")
 #                    debug_script = task_root / "spec" / "value_debug.py"
 #                    if not debug_script.exists():

@@ -11,7 +11,7 @@ Your task is:
 5. For numerical mismatch errors or difficult-to-observe issues (like CUDA illegal memory access), do NOT provide file content; instead, note the error type and suggest further breakpoint or sanitizer analysis.
 
 Error Types:
-- value_error  #The results do not match the torch inference 
+- result_error  #The results do not match the torch inference 
 - cuda_illegal_memory 
 - cuda_device_assert 
 - parameter_alignment_error #The weights of the entry file model and the ref file model cannot be completely copied
@@ -30,7 +30,7 @@ Output JSON format:
   "most_likely_error_file": "<path to file where error most likely occurs>",
   "error_type": "<error type>",
   "explain_reasoning": "<brief reasoning why the error occurs here>",
-  "show_files": [  # Provide context for subsequent fixes, it can only be hidden for value_error, cuda_illegal_memor, or cuda_device_assert
+  "show_files": [  # Provide context for subsequent fixes, it can only be hidden for result_error, cuda_illegal_memor, or cuda_device_assert
     {
       "file_path": "<file path to display>"
     }
@@ -175,10 +175,10 @@ DEBUG_SCRIPT_TEMPLATE = Template("""
 You are a PyTorch CUDA verification engineer. Your task is to generate a Python script that helps debug numerical errors in a CUDA kernel implementation.
 
 Key principles:
-- The CUDA implementation is the **target under inspection**.
-- The PyTorch implementation is the **correct reference**.
+- The CUDA implementation is the target under inspection.
+- The PyTorch implementation is the correct reference.
 - The script must compare both implementations in order to detect numerical discrepancies.
-- For each kernel invocation, **only save the first observed result**.
+- For each kernel invocation, only save the first observed result.
 - The PyTorch reference result must also be saved correspondingly.
 - The script should strictly follow the structure demonstrated in the example.
 
@@ -210,43 +210,3 @@ No additional explanations.
 The structure and formatting must match the example exactly.
 """)
 
-
-
-INIT_CUDA_IMPLEMNT_REPORT_VALIDATOR_TEMPLATE  = Template("""
-You are a CUDA Implementation Analyzer.Analyze the paired PyTorch model and CUDA implementation, extract fusion structure and launch configuration into strict JSON.
-PyTorch Reference Semantics:
-```python
-$source_code
-```                    
-Implementation CUDA Kernel Code:
-```cuda
-$kernel_code
-```
-Output Format:
-```json
-{
-  "fusion_operators": [
-    {
-      "operator_id": 0,
-      "name": "Descriptive_Name",
-      "operators": ["PyTorch_Op_Name", "..."],
-      "dominant_pattern": "GEMM | Convolution | Reduction | Elementwise",
-      "optimization_profile": {
-        "bound": "Compute | Memory | Mixed",
-        ....
-      }
-    }
-  ],
-  "launch_situation": [
-    {
-      "operator_id": 0,
-      "kernel_name": "exact_kernel_function_name",
-      "launch_config": {
-        "block_dim": {"x": 256, "y": 1, "z": 1},
-        "grid_dim": {"x": "symbolic_expr", "y": "symbolic_expr", "z": 1}
-      }
-    }
-  ]
-}
-```                                                      
-""")

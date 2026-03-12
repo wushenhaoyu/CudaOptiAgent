@@ -1,11 +1,11 @@
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.cpp_extension import load
 import os, hashlib
+import math
 
-kernel_path = "kernel/kernel.cu"
+kernel_path = "/home/haoyu/code/CudaOptiAgent/run/openai_gpt-5-mini/level3/50_ReLUSelfAttention/spec/kernel/kernel.cu"
 if not os.path.exists(kernel_path):
     raise FileNotFoundError(f"CUDA kernel not found: {kernel_path}")
 
@@ -20,30 +20,26 @@ cuda_extension = load(
 )
 
 
-batch_size = 32 
-num_classes = 20
+batch_size = 16
+max_seqlen = 1024
+n_embd = 768
+n_head = 12
 
 def get_inputs():
-    return [torch.rand(batch_size, 1, 32, 32)]
+    return [torch.rand(batch_size, max_seqlen, n_embd)]
+
+def get_init_inputs():
+    return [n_embd, n_head, max_seqlen]
 
 class ModelDebug(nn.Module):
-    def __init__(self, num_classes):
-        """
-        LeNet-5 architecture implementation in PyTorch.
-
-        :param num_classes: The number of output classes.
-        """
+    def __init__(self, n_embd, n_head, max_seqlen):
         super(ModelDebug, self).__init__()
-        
-        # Convolutional layers
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=6, kernel_size=5, stride=1)
-        self.conv2 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=5, stride=1)
-        
-        # Fully connected layers
-        self.fc1 = nn.Linear(in_features=16*5*5, out_features=120)
-        self.fc2 = nn.Linear(in_features=120, out_features=84)
-        self.fc3 = nn.Linear(in_features=84, out_features=num_classes)
-
+        assert n_embd % n_head == 0
+        self.c_attn = nn.Linear(n_embd, 3 * n_embd)
+        self.c_proj = nn.Linear(n_embd, n_embd)
+        self.register_buffer("bias", torch.tril(torch.ones(max_seqlen, max_seqlen)).view(1, 1, max_seqlen, max_seqlen))
+        self.n_head = n_head
+        self.n_embd = n_embd
         self._cache = {}
         self.report = []
 
@@ -66,31 +62,33 @@ class ModelDebug(nn.Module):
             raise RuntimeError(f"FIRST_KERNEL_MISMATCH: {kernel_name}")
 
     def forward(self, x):
-        torch_out = F.max_pool2d(F.relu(self.conv1(x)), 2, 2)
-        cuda_out = cuda_extension.conv_relu_maxpool(x, self.conv1.weight, self.conv1.bias, 2, 2)
-        self._compare_once("conv_relu_maxpool", cuda_out, torch_out)
-        x = torch_out
+        B, T, C = x.size()
 
-        torch_out = F.max_pool2d(F.relu(self.conv2(x)), 2, 2)
-        cuda_out = cuda_extension.conv_relu_maxpool(x, self.conv2.weight, self.conv2.bias, 2, 2)
-        self._compare_once("conv_relu_maxpool", cuda_out, torch_out)
-        x = torch_out
+        torch_qkv = self.c_attn(x)
+        cuda_qkv = cuda_extension.c_attn_linear_gemm(x, self.c_attn.weight, self.c_attn.bias)
+        self._compare_once("c_attn_linear_gemm", cuda_qkv, torch_qkv)
 
-        x = x.view(-1, 16*5*5)
+        torch_q, torch_k, torch_v = torch_qkv.split(self.n_embd, dim=2)
+        torch_k = torch_k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
+        torch_q = torch_q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
+        torch_v = torch_v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
 
-        torch_out = F.relu(self.fc1(x))
-        cuda_out = cuda_extension.linear_gemm_relu(x, self.fc1.weight, self.fc1.bias)
-        self._compare_once("linear_gemm_relu", cuda_out, torch_out)
-        x = torch_out
+        cuda_q, cuda_k, cuda_v = cuda_extension.slice_reshape_transpose_template(cuda_qkv, self.n_embd, self.n_head, B, T, C)
+        cuda_cat = torch.cat([cuda_q, cuda_k, cuda_v], dim=0)
+        torch_cat = torch.cat([torch_q, torch_k, torch_v], dim=0)
+        self._compare_once("slice_reshape_transpose_template", cuda_cat, torch_cat)
 
-        torch_out = F.relu(self.fc2(x))
-        cuda_out = cuda_extension.linear_gemm_relu(x, self.fc2.weight, self.fc2.bias)
-        self._compare_once("linear_gemm_relu", cuda_out, torch_out)
-        x = torch_out
+        torch_att = (torch_q @ torch_k.transpose(-2, -1)) * (1.0 / math.sqrt(torch_k.size(-1)))
+        torch_att = torch_att.masked_fill(self.bias[:, :, :T, :T] == 0, float('-inf'))
+        torch_att = F.relu(torch_att)
 
-        torch_out = self.fc3(x)
-        cuda_out = cuda_extension.linear_gemm(x, self.fc3.weight, self.fc3.bias)
-        self._compare_once("linear_gemm", cuda_out, torch_out)
-        x = torch_out
+        cuda_att = cuda_extension.attn_gemm_with_mask_relu_epilogue(cuda_q, cuda_k, self.bias[:, :, :T, :T])
+        self._compare_once("attn_gemm_with_mask_relu_epilogue", cuda_att, torch_att)
 
-        return x
+        torch_y = torch_att @ torch_v
+        torch_y = torch_y.transpose(1, 2).contiguous().view(B, T, C)
+
+        cuda_y = cuda_extension.att_mul_v_and_relayout(cuda_att, cuda_v, B, T, C)
+        self._compare_once("att_mul_v_and_relayout", cuda_y, torch_y)
+
+        return cuda_y
