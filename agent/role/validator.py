@@ -6,7 +6,7 @@ from typing import Dict
 from agent.llm import LLM
 from agent.settings import Validator_settings
 from scripts.run_ncu import profile_with_ncu
-from agent.template.validator import ANALYZE_CUDA_ERROR_TEMPLATE, DEBUG_SCRIPT_TEMPLATE, GENERATE_ERROR_REPORT_TEMPLATE, GENERATE_ERROR_REPORT_TEMPLATE_NO_CONTENT, INIT_CUDA_IMPLEMNT_REPORT_VALIDATOR_TEMPLATE
+from agent.template.validator import ANALYZE_CUDA_ERROR_TEMPLATE, DEBUG_SCRIPT_TEMPLATE, GENERATE_ERROR_REPORT_TEMPLATE, GENERATE_ERROR_REPORT_TEMPLATE_NO_CONTENT
 from utils.utils import extract_error_report, extract_json, strip_fence, write_file
 
 
@@ -69,19 +69,7 @@ class Validator(LLM):
         write_file(root_dir / "spec" / "value_debug.py", out)
 
     
-    def generate_init_cuda_impl_report(self, root_dir: Path, source_code: str, kernel_code: str):
-        tqdm.write("generate_init_cuda_impl_report")
-        prompt = INIT_CUDA_IMPLEMNT_REPORT_VALIDATOR_TEMPLATE.substitute(
-            source_code=source_code,
-            kernel_code=kernel_code,
-        )
-        while True:
-            out = self.chat(prompt)
-            impl_reprot = extract_json(out)
-            if impl_reprot is not None:
-                break
-        write_file(root_dir /  "bootstrap" / "impl_report.txt", str(impl_reprot))  
-        return impl_reprot
+    
     
     def generate_init_ncu_report(self, root_dir: Path):
         tqdm.write("generate_init_ncu_report...")
