@@ -209,23 +209,48 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                         first_error = msg['ncs_msg']["errors"][0]
                         problem_kernel = first_error["kernel"]
                         problem_kernel_name = find_best_match(problem_kernel, list_all_files(task_root / "spec"))
+                        
+                        msg["most_likely_error_file"] = problem_kernel_name
 
+                        error_analysis_second_file = current_dir / "error_analysis_second"
+                        error_analysis_second = None
+                        if error_analysis_second_file.exists():
+                            error_analysis_second = json.load(read_file(error_analysis_second_file))
+                        else:
+                            error_analysis_second = validator.analyze_init_error_second(
+                                task_root,
+                                current_dir,
+                                error_type,
+                                problem_kernel_name,
+                                str(msg),
+                                list_all_files(task_root / "spec"),
+                                task_description
+                            ) 
+                        show_files = error_analysis_second.get("show_files", [])
                         # Check for existing error report
                         error_report_file = current_dir / "error_report.json"
                         if error_report_file.exists():
                             error_report = json.loads(read_file(error_report_file))
                         else:
-                            error_report = validator.generate_error_report_(
-                                task_root,
-                                current_dir,
-                                str(msg),
-                                task_description,
-                                list_all_files(task_root / "spec"),
-                                read_file(task_root / "spec" / "entry.py"),
-                                problem_kernel_name, 
-                                read_file(task_root / "spec" / problem_kernel_name),
+                            error_report = validator.generate_error_report(
+                                task_root, 
+                                current_dir, 
+                                str(msg), 
+                                task_description, 
+                                str(list_all_files(task_root / "spec")),
+                                load_show_files(show_files)
                             )
-                            write_file(error_report_file, json.dumps(error_report, indent=2))
+                            #error_report = validator.generate_error_report_(
+                            #    task_root,
+                            #    current_dir,
+                            #    str(msg),
+                            #    task_description,
+                            #    list_all_files(task_root / "spec"),
+                            #    read_file(task_root / "spec" / "entry.py"),
+                            #    problem_kernel_name, 
+                            #    read_file(task_root / "spec" / problem_kernel_name),
+                            #)
+                        write_file(error_report_file, json.dumps(error_report, indent=2))
                     break
 
 
@@ -262,21 +287,36 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                     for kernel_report in kernel_reports:
                         if kernel_report.get('status') != "ok":
                             problem_kernel_name = kernel_report["kernel"] + ".cu"
+                            msg["most_likely_error_file"] = problem_kernel_name
+
+                            error_analysis_second_file = current_dir / "error_analysis_second"
+                            error_analysis_second = None
+                            if error_analysis_second_file.exists():
+                                error_analysis_second = json.load(read_file(error_analysis_second_file))
+                            else:
+                                error_analysis_second = validator.analyze_init_error_second(
+                                    task_root,
+                                    current_dir,
+                                    error_type,
+                                    problem_kernel_name,
+                                    str(msg),
+                                    list_all_files(task_root / "spec"),
+                                    task_description
+                                ) 
+                            show_files = error_analysis_second.get("show_files", [])
                             
                             # Check for existing error report
                             error_report_file = current_dir / "error_report.json"
                             if error_report_file.exists():
                                 error_report = json.loads(read_file(error_report_file))
                             else:
-                                error_report = validator.generate_error_report_(
-                                    task_root,
-                                    current_dir,
-                                    str(msg),
-                                    task_description,
+                                error_report = validator.generate_error_report(
+                                    task_root, 
+                                    current_dir, 
+                                    str(msg), 
+                                    task_description, 
                                     str(list_all_files(task_root / "spec")),
-                                    read_file(task_root / "spec" / "entry.py"),
-                                    problem_kernel_name, 
-                                    read_file(task_root / "spec" / "kernel" / problem_kernel_name),
+                                    load_show_files(show_files)
                                 )
                                 write_file(error_report_file, json.dumps(error_report, indent=2))
                             break

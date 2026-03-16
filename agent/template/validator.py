@@ -44,6 +44,43 @@ Constraints:
 - Always provide a valid JSON output following the format above.
 """)
 
+ANALYZE_CUDA_ERROR_TEMPLATE_SECOND = Template("""
+You are an expert CUDA debugger. The error type and its location have already been identified. 
+
+Your task is:
+1. Analyze the provided error and its location in the context of the task description.
+2. Decide which additional files or specific sections (ref.py, entry.py, or other kernels) must be exposed to resolve the root cause.
+3. If it is a 'result_error' or 'cuda_illegal_memory', prioritize requesting context that reveals the "Computational Graph" or "Memory Layout" (e.g., comparing ref.py forward logic vs entry.py call sequence).
+4. Provide a clear reasoning why the requested context is necessary for the final fix.
+
+Input:
+- Identified Error Type: $error_type
+- Identified Error Location: $error_location
+- Error message: $error_message
+- Task description: $task_description
+- Available files: (entry.py, kernel.cu, ref.py, and other kernel-related files)
+$file_list
+
+Output JSON format:
+```json
+{
+  "error_type": "$error_type",
+  "error_location": "$error_location",
+  "tips": "<Reasoning: Why this error occurs here and why the requested files are needed to bridge the logical gap (e.g., verifying if the fusion order in kernel matches the reference sequence).>",
+  "show_files": [ 
+    {
+      "file_path": "<file path to display, e.g., 'ref.py' to check operator order or 'entry.py' to check tensor shapes>"
+    }
+  ]
+}
+```
+Constraints:
+- Strictly Architecture-Aware: For 'result_error', you MUST consider if the mismatch stems from the operator sequence (e.g., ReLU before/after Add) between ref.py and entry.py.
+- Minimal but Sufficient: Request only the files necessary to confirm your hypothesis and generate the fix.
+- No Commentary: Return valid JSON only.
+- Show Files: Unlike the preliminary stage, here you SHOULD request files (even for result/memory errors) because you now need the specific code to perform the fix.
+""")
+
 GENERATE_ERROR_REPORT_TEMPLATE = Template("""
 You are an error analysis assistant for a PyTorch acceleration framework that generates custom CUDA kernels.
 
@@ -104,6 +141,66 @@ Rules:
 
 
 GENERATE_ERROR_REPORT_TEMPLATE_NO_CONTENT = Template("""
+You are an error analysis assistant for a PyTorch acceleration framework that generates custom CUDA kernels.
+
+Your task:
+1. Analyze the error message.
+2. Examine the selected files.
+3. Group issues by the file that must be modified.
+4. Each file should appear at most once in the output.
+5. For each file, list all concrete issues found inside it.
+
+Input:
+
+- Error message:
+$error_message
+
+- Task description:
+$task_description
+
+- Available files:
+(entry.py is the Python entry code,
+kernel.cu contains CUDA kernels and pybind bindings,
+ref.py is the original PyTorch reference implementation,
+there may be additional .cu/.h files inside the kernel directory)
+$file_list
+
+$problem_kernel_name:
+```cuda
+$problem_kernel_content
+```\n
+
+Output strictly in the following JSON format:
+```json
+{
+  "files": [
+    {
+      "file_name": "<file that must be modified>",
+      "related_files": [
+        "<context file>",
+        "<another context file if needed>"
+      ],
+      "issues": [
+        {
+          "error_snippet": "<minimal relevant snippet>",
+          "error_reason": "<precise explanation>",
+          "suggested_fix": "<actionable fix>"
+        }
+      ]
+    }
+  ]
+}
+```
+Rules:
+- Strictly Error-Fix Only: Solve the reported $error_message. Ignore any performance optimizations (Tiling, Vectorization) or refactoring unless they are the only way to fix the bug.
+- Minimal Invasive Changes: Correct logic, indexing, or configuration overflows without altering the kernel's basic architecture.
+- JSON Compliance: Each file appears once. file_name must include 'kernel/' for .cu files. related_files must be from Available files. 
+- Output Format: NO commentary. NO full file rewrites. Return valid JSON only.
+- Specificity: suggested_fix must state exactly WHAT to change and HOW to resolve the mismatch or crash.
+""")
+
+
+GENERATE_ERROR_REPORT_TEMPLATE_NO_CONTENT_WITH_LAST = Template("""
 You are an error analysis assistant for a PyTorch acceleration framework that generates custom CUDA kernels.
 
 Your task:
