@@ -1,1 +1,1 @@
-Linear_c_proj_MLP_GEMM_with_ResidualAdd failed with CUDA error: invalid configuration argument
+Reference '/home/haoyu/code/CudaOptiAgent/run/openai_gpt-5-mini_v1/level3/38_LSTMBidirectional/spec/ref.py' must define Model and get_inputs().

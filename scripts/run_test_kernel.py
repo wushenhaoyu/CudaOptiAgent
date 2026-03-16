@@ -255,7 +255,7 @@ def _test_kernel_process(
                 return f"[{h} ... {e}] (len={total})"
 
             raise ValueError(
-                f"Outputs are not close (atol=5e-3, rtol=5e-3). "
+                f"Outputs are not close (atol=8e-3, rtol=8e-3). "
                 f"max_abs_err={max_err:.3e}, mean_abs_err={mean_err:.3e}\n"
                 f"ref:  {_fmt_trunc(ref_out)}\n"
                 f"test: {_fmt_trunc(test_out)}"
