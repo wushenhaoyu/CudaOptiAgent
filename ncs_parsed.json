@@ -1,0 +1,22 @@
+{
+  "success": false,
+  "summary": {
+    "total_matches": 2,
+    "unique_errors": 1,
+    "by_type": {
+      "API_ERROR": 1
+    },
+    "by_kernel": {
+      "N/A": 1
+    }
+  },
+  "errors": [
+    {
+      "type": "API_ERROR",
+      "error_code": "cudaErrorInvalidConfiguration",
+      "message": "invalid configuration argument",
+      "api_call": "cudaLaunchKernel",
+      "count": 2
+    }
+  ]
+}

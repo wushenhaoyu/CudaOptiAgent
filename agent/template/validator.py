@@ -95,15 +95,11 @@ Output strictly in the following JSON format:
 }
 ```
 Rules:
-
-- Each file must appear only once.
-- file_name must be one of the Available files.
-- related_files must be chosen from Available files.
-- Keep snippets minimal.
-- suggested_fix must clearly describe WHAT to change and HOW.
-- Do NOT rewrite entire files.
-- Do NOT include commentary outside JSON.
-- Always return valid JSON only.
+- Strictly Error-Fix Only: Solve the reported $error_message. Ignore any performance optimizations (Tiling, Vectorization) or refactoring unless they are the only way to fix the bug.
+- Minimal Invasive Changes: Correct logic, indexing, or configuration overflows without altering the kernel's basic architecture.
+- JSON Compliance: Each file appears once. file_name must include 'kernel/' for .cu files. related_files must be from Available files. 
+- Output Format: NO commentary. NO full file rewrites. Return valid JSON only.
+- Specificity: suggested_fix must state exactly WHAT to change and HOW to resolve the mismatch or crash.
 """)
 
 
@@ -159,15 +155,11 @@ Output strictly in the following JSON format:
 }
 ```
 Rules:
-
-- Each file must appear only once.
-- file_name must be one of the Available files.
-- related_files must be chosen from Available files.
-- Keep snippets minimal.
-- suggested_fix must clearly describe WHAT to change and HOW.
-- Do NOT rewrite entire files.
-- Do NOT include commentary outside JSON.
-- Always return valid JSON only.
+- Strictly Error-Fix Only: Solve the reported $error_message. Ignore any performance optimizations (Tiling, Vectorization) or refactoring unless they are the only way to fix the bug.
+- Minimal Invasive Changes: Correct logic, indexing, or configuration overflows without altering the kernel's basic architecture.
+- JSON Compliance: Each file appears once. file_name must include 'kernel/' for .cu files. related_files must be from Available files. 
+- Output Format: NO commentary. NO full file rewrites. Return valid JSON only.
+- Specificity: suggested_fix must state exactly WHAT to change and HOW to resolve the mismatch or crash.
 """)
 
 

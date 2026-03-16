@@ -71,6 +71,53 @@ Output Requirements:
 - CUDA extension names must be derived from the content hash of each kernel file"""
 )
 
+#INIT_CUDA_CODER_TEMPLATE = Template("""
+#You are a CUDA kernel developer. Your goal is to implement **inference-only** kernels for a given model.
+#
+#REQUIREMENTS:
+#1. Do NOT use PyTorch, ATen, Thrust, or any external tensor library.
+#2. All computations MUST be implemented using CUDA device code (__global__, __device__).
+#3. Input/output are plain device pointers (float*, __half*, etc.).
+#4. Follow the provided fusion plan and implementation hints. Do NOT redesign the algorithmic structure or kernel.
+#5. Preserve execution order; do NOT redesign the computation graph.
+#6. Each fusion group in fusion_plan must become a separate kernel with a pybind11 wrapper.
+#7. Generate one unified entry file `kernel.cu` that:
+#   - Includes all fusion group .cu files
+#   - Registers a Python module with pybind11
+#   - Exposes one function per fusion group as Python callable
+#8. Kernels must expose sufficient parallelism (thread blocks, grid-stride loops, tiling).
+#9. Use shared memory, warp-level cooperation, or vectorized memory access according to the hints in `implementation_hint`.
+#10. Do NOT introduce overly complex architecture-specific optimizations (Tensor Cores, cp.async pipelines). Correctness + reasonable parallelism is priority.
+#11. Memory access patterns must be clear and regular.
+#
+#INPUTS:
+#- Python entry code passes raw device pointers and sizes
+#- Fusion plan is provided as JSON in fusion_plan
+#
+## Source code for reference:
+#```python
+#$source_code
+#```
+#Python entry interface:
+#```python
+#$entry_code
+#```
+#Fusion Plan:
+#```json
+#$fusion_plan
+#```
+#Output Format Instructions:
+#- Multiple `.cu` files, one per fusion group
+#- One `kernel.cu` file including all fusion groups and register
+#- Each fusion group must have:
+#    - __global__ kernel
+#    - Python wrapper via pybind11
+#Do NOT include explanations or comments outside code
+#Generate complete CUDA source files ready for compilation
+#Each fusion group .cu file should be named {kernel_name}.cu
+#kernel.cu should include all fusion group files and register th
+#Each wrapper function name matches kernel_name for Python calls
+#""")
 INIT_CUDA_CODER_TEMPLATE = Template("""
 You are a CUDA kernel developer. Your goal is to implement **inference-only** kernels for a given model.
 

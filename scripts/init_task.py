@@ -85,20 +85,20 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
             if error_report_file.exists():
                
                 kernel_iter = max_iter + 1
-                print(f"Resuming: found error_report in iter_{max_iter}, starting from iter_{kernel_iter}")
+                print(f"Task {task_name} Resuming: found error_report in iter_{max_iter}, starting from iter_{kernel_iter}")
             else:
                 result_file = last_iter_dir / "result.json"
                 if result_file.exists():
                     result = json.loads(read_file(result_file))
                     if result.get("runnable", False):
-                        print(f"Task already completed successfully at iter_{max_iter}")
+                        print(f"Task {task_name} already completed successfully at iter_{max_iter}")
                         continue
                     else:
                         kernel_iter = max_iter
-                        print(f"Resuming: iter_{max_iter} has result but not passed, retrying")
+                        print(f"Task {task_name} Resuming: iter_{max_iter} has result but not passed, retrying")
                 else:
                     kernel_iter = max_iter
-                    print(f"Resuming: no result in iter_{max_iter}, starting from there")
+                    print(f" Task {task_name} Resuming: no result in iter_{max_iter}, starting from there")
         
         while kernel_iter < args.bootstrap_iter:
 
