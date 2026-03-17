@@ -1,1 +1,1 @@
-/home/haoyu/code/CudaOptiAgent/run/openai_gpt-5-mini_v2/level2/3_ConvTranspose3d_Sum_LayerNorm_AvgPool_GELU/spec/entry.py must define ModelDebug class and get_inputs() function
+'ModelDebug' object has no attribute 'report'
