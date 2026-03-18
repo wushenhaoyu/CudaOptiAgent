@@ -140,65 +140,6 @@ Rules:
 """)
 
 
-GENERATE_ERROR_REPORT_TEMPLATE_NO_CONTENT = Template("""
-You are an error analysis assistant for a PyTorch acceleration framework that generates custom CUDA kernels.
-
-Your task:
-1. Analyze the error message.
-2. Examine the selected files.
-3. Group issues by the file that must be modified.
-4. Each file should appear at most once in the output.
-5. For each file, list all concrete issues found inside it.
-
-Input:
-
-- Error message:
-$error_message
-
-- Task description:
-$task_description
-
-- Available files:
-(entry.py is the Python entry code,
-kernel.cu contains CUDA kernels and pybind bindings,
-ref.py is the original PyTorch reference implementation,
-there may be additional .cu/.h files inside the kernel directory)
-$file_list
-
-$problem_kernel_name:
-```cuda
-$problem_kernel_content
-```\n
-
-Output strictly in the following JSON format:
-```json
-{
-  "files": [
-    {
-      "file_name": "<file that must be modified>",
-      "related_files": [
-        "<context file>",
-        "<another context file if needed>"
-      ],
-      "issues": [
-        {
-          "error_snippet": "<minimal relevant snippet>",
-          "error_reason": "<precise explanation>",
-          "suggested_fix": "<actionable fix>"
-        }
-      ]
-    }
-  ]
-}
-```
-Rules:
-- Strictly Error-Fix Only: Solve the reported $error_message. Ignore any performance optimizations (Tiling, Vectorization) or refactoring unless they are the only way to fix the bug.
-- Minimal Invasive Changes: Correct logic, indexing, or configuration overflows without altering the kernel's basic architecture.
-- JSON Compliance: Each file appears once. file_name must include 'kernel/' for .cu files. related_files must be from Available files. 
-- Output Format: NO commentary. NO full file rewrites. Return valid JSON only.
-- Specificity: suggested_fix must state exactly WHAT to change and HOW to resolve the mismatch or crash.
-""")
-
 
 GENERATE_ERROR_REPORT_TEMPLATE_NO_CONTENT_WITH_LAST = Template("""
 You are an error analysis assistant for a PyTorch acceleration framework that generates custom CUDA kernels.
@@ -213,22 +154,26 @@ Your task:
 Input:
 
 - Error message:
+```json
 $error_message
-
+```
 - Task description:
 $task_description
 
 - Available files:
-(entry.py is the Python entry code,
+entry.py is the Python entry code,
 kernel.cu contains CUDA kernels and pybind bindings,
-ref.py is the original PyTorch reference implementation,
-there may be additional .cu/.h files inside the kernel directory)
+ref.py is the original PyTorch reference implementation (read only),
+there may be additional .cu/.h files inside the kernel directory
 $file_list
 
-$problem_kernel_name:
-```cuda
-$problem_kernel_content
-```\n
+- Selected files with content:
+$selected_files_content
+                                                               
+- error report you given last time:(You can compare it with the previous suggestions to see if it has been fixed, but do not make repeated meaningless suggestions.)
+```json
+$last_error_report
+```
 
 Output strictly in the following JSON format:
 ```json

@@ -215,8 +215,10 @@ Do NOT change function signatures unless required by error description.
 If function signature is changed, it MUST stay compatible with related files.
 
 Keep CUDA kernel launch, pybind definitions, and entry interface consistent.
-
+                             
 Focus strictly on correctness.
+                                      
+Avoid using TORCH_CHECK(), as this will prevent the automated process from finding the error location.  
 
 Output the FULL corrected file content.
 

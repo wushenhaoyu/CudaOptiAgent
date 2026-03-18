@@ -108,12 +108,15 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
             current_dir.mkdir(parents=True, exist_ok=True)
 
             # Load error_report from previous iteration if kernel_iter > 0
+            prev_error_report_file = None
             error_report = None
+            last_error_report = None
             if kernel_iter > 0:
                 prev_iter_dir = bootstrap / f"iter_{kernel_iter - 1}"
                 prev_error_report_file = prev_iter_dir / "error_report.json"
                 if prev_error_report_file.exists():
                     error_report = json.loads(read_file(prev_error_report_file))
+                    last_error_report = json.loads(read_file(prev_error_report_file))
                     print(f"Loaded error_report from iter_{kernel_iter - 1}")
 
             if kernel_iter == 0:
@@ -238,7 +241,9 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                                 str(msg), 
                                 task_description, 
                                 str(list_all_files(task_root / "spec")),
-                                load_show_files(show_files)
+                                load_show_files(show_files),
+                                problem_kernel_name,
+                                last_error_report
                             )
                             #error_report = validator.generate_error_report_(
                             #    task_root,
@@ -316,7 +321,9 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                                     str(msg), 
                                     task_description, 
                                     str(list_all_files(task_root / "spec")),
-                                    load_show_files(show_files)
+                                    load_show_files(show_files),
+                                    problem_kernel_name,
+                                    last_error_report
                                 )
                                 write_file(error_report_file, json.dumps(error_report, indent=2))
                             break
@@ -336,7 +343,9 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                             str(msg), 
                             task_description, 
                             str(list_all_files(task_root / "spec")),
-                            load_show_files(show_files)
+                            load_show_files(show_files),
+                            error_analysis.get("most_likely_error_file",{}),
+                            last_error_report
                         )
                         write_file(error_report_file, json.dumps(error_report, indent=2))
                     break
