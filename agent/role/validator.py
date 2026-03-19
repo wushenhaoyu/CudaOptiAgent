@@ -15,7 +15,7 @@ class Validator(LLM):
     def __init__(self, args: Dict):
 
         #super().__init__(server_name=args.server_name, model=args.model, max_tokens=16384, temperature=1.0, top_p=1.0)
-        super().__init__(server_name="openai", model="gpt-5-mini", max_tokens=16384, temperature=0.8, top_p=1.0)
+        super().__init__(server_name="openai", model="gemini-3-flash-preview", max_tokens=16384, temperature=0.8, top_p=1.0)
 
     def analyze_init_error(self, root_dir: Path, current_dir: Path, error_message: str, file_list: str, task_description: str):
         prompt = ANALYZE_CUDA_ERROR_TEMPLATE.substitute(

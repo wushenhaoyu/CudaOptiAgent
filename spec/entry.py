@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch.utils.cpp_extension import load
 import os, hashlib
 
-kernel_path = "kernel/kernel.cu"
+kernel_path = "/home/haoyu/code/CudaOptiAgent/spec/kernel/kernel.cu"
 if not os.path.exists(kernel_path):
     raise FileNotFoundError(f"CUDA kernel not found: {kernel_path}")
 
@@ -138,7 +138,6 @@ class ModelNew(nn.Module):
 
         # 4. Head
         x = cuda_extension.ToCLS_Slice(x)
-        return x
         x = cuda_extension.Head_FC1_GEMM_plus_GELU(
             x,
             self.mlp_head[0].weight,
