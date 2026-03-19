@@ -12,7 +12,7 @@ from agent.role.planner import Planner
 from scripts.run_ncs_debug import run_ncs_debug
 from scripts.run_value_debug import run_model_debug
 from scripts.run_ncu import profile_with_ncu
-from utils.utils import  delete_folder, copy_folder, dict_to_text, find_best_match, list_all_files, load_show_files, read_file, remove_justification, text_to_dict, write_file, extract_recommendation
+from utils.utils import  delete_folder, copy_folder, dict_to_text, extract_all_kernels_flat, find_best_match, list_all_files, load_show_files, read_file, remove_justification, text_to_dict, write_file, extract_recommendation
 from scripts.run_test_kernel import test_kernel
 
 
@@ -245,16 +245,6 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
                                 problem_kernel_name,
                                 last_error_report
                             )
-                            #error_report = validator.generate_error_report_(
-                            #    task_root,
-                            #    current_dir,
-                            #    str(msg),
-                            #    task_description,
-                            #    list_all_files(task_root / "spec"),
-                            #    read_file(task_root / "spec" / "entry.py"),
-                            #    problem_kernel_name, 
-                            #    read_file(task_root / "spec" / problem_kernel_name),
-                            #)
                         write_file(error_report_file, json.dumps(error_report, indent=2))
                     break
 
@@ -355,11 +345,20 @@ def init_task(tasks: List[Path], run_dir: Path, args: Dict):
 
             kernel_iter += 1
             
-#=========================================== Opti =====================================
-        pass
-            
-#=========================================== Opti =====================================
-        pass
+#=========================================== Navie Opti =====================================
+
+        baseline_folder = task_root / "optimize" / "baseline"
+        baseline_ncu_report = task_root / "optimize" / "baseline" / "ncu_report.csv"
+
+        if not baseline_folder.exists():
+            copy_folder(task_root / "spec" / "kernel", baseline_folder)
+
+        if not baseline_ncu_report.exists():
+            profile_with_ncu(task_root / "spec" / "entry.py", args.device, baseline_ncu_report, kernel_names=extract_all_kernels_flat(Path(task_root / "spce" / "kernel")))
+
+        
+#=============================================================================================            
+
 #def init_task(tasks: List[Path], run_dir: Path, args: Dict):
 #    import ast
 #    
