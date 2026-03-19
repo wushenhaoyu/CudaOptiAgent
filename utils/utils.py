@@ -5,9 +5,64 @@ import os
 import re
 import shutil
 import textwrap
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set, Union
 from pathlib import Path
 
+
+def extract_cuda_kernel_names(cu_path: Path) -> List[str]:
+    try:
+        src = cu_path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return []
+
+    pattern = re.compile(r'__global__\s+(?:__launch_bounds__\s*\([^)]*\)\s+)?void\s+(\w+)\s*\(')
+    
+    seen = set()
+    result = []
+    for name in pattern.findall(src):
+        if name not in seen:
+            seen.add(name)
+            result.append(name)
+    return result
+
+def extract_all_kernels_from_dir(
+    search_path: Union[str, Path],
+    recursive: bool = True
+) -> dict[str, List[str]]:
+    search_path = Path(search_path)
+    
+    if search_path.is_file() and search_path.suffix == '.cu':
+        cu_files = [search_path]
+    elif search_path.is_dir():
+        pattern = "**/*.cu" if recursive else "*.cu"
+        cu_files = list(search_path.glob(pattern))
+    else:
+        return {}
+    
+    result = {}
+    for cu_file in sorted(cu_files):
+        kernels = extract_cuda_kernel_names(cu_file)
+        if kernels:  
+            result[str(cu_file)] = kernels
+    
+    return result
+
+
+def extract_all_kernels_flat(
+    search_path: Union[str, Path],
+    recursive: bool = True
+) -> List[str]:
+    all_kernels = extract_all_kernels_from_dir(search_path, recursive)
+    
+    seen: Set[str] = set()
+    ordered: List[str] = []
+    for kernels in all_kernels.values():
+        for k in kernels:
+            if k not in seen:
+                seen.add(k)
+                ordered.append(k)
+    
+    return ordered
 
 def find_best_match(kernel_name, cu_files):
     base = kernel_name.replace("_kernel", "")

@@ -49,7 +49,5 @@ def run_script(script_path, device_idx=0):
 if __name__ == "__main__":
 
     script = sys.argv[1]
-    print(script)
     device = int(sys.argv[2]) if len(sys.argv) > 2 else 0
-    print(device)
     run_script(script, device)
